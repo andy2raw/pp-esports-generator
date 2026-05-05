@@ -67,6 +67,7 @@ export function usePrizePicks() {
           }
         })
         .filter(Boolean)
+        .filter(p => !/\bMAPS?\b/i.test(p.playerName))
 
       setProjections(parsed)
       setLastRefresh(new Date())

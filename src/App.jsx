@@ -90,6 +90,9 @@ export default function App() {
       )}
 
       <div style={{ padding: '16px' }}>
+        <p style={{ margin: '0 0 14px', fontSize: 11, color: '#555', lineHeight: 1.5 }}>
+          Esports lines are mostly Goblin picks — negative EV is expected. Focus on highest probability picks.
+        </p>
         {(combos2.length > 0 || combos4.length > 0 || combos6.length > 0) && (
           <ErrorBoundary label="Slip cards error">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 24 }}>
