@@ -1,35 +1,33 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-// Maps PrizePicks stat labels → PandaScore field names on game/stats objects.
-// null means we can't map it (skip probability adjustment for that stat).
 const STAT_MAP = {
   LOL: {
-    'Kills':                      ['kills'],
-    'Deaths':                     ['deaths'],
-    'Assists':                    ['assists'],
-    'CS':                         ['minions_killed', 'neutral_minions_killed'],
-    'Gold Earned':                ['gold_earned'],
-    'KDA':                        null,
+    'Kills':       ['kills'],
+    'Deaths':      ['deaths'],
+    'Assists':     ['assists'],
+    'CS':          ['minions_killed', 'neutral_minions_killed'],
+    'Gold Earned': ['gold_earned'],
+    'KDA':         null,
   },
   CSGO: {
-    'Kills':                      ['kills'],
-    'Deaths':                     ['deaths'],
-    'Assists':                    ['assists'],
-    'Headshots':                  ['headshots'],
-    'Rating':                     null,
+    'Kills':       ['kills'],
+    'Deaths':      ['deaths'],
+    'Assists':     ['assists'],
+    'Headshots':   ['headshots'],
+    'Rating':      null,
   },
   VAL: {
-    'Kills':                      ['kills'],
-    'Deaths':                     ['deaths'],
-    'Assists':                    ['assists'],
-    'Headshots':                  ['headshots'],
+    'Kills':       ['kills'],
+    'Deaths':      ['deaths'],
+    'Assists':     ['assists'],
+    'Headshots':   ['headshots'],
   },
   DOTA2: {
-    'Kills':                      ['kills'],
-    'Deaths':                     ['deaths'],
-    'Assists':                    ['assists'],
-    'Last Hits':                  ['last_hits'],
-    'Gold Per Min':               ['gold_per_min'],
+    'Kills':       ['kills'],
+    'Deaths':      ['deaths'],
+    'Assists':     ['assists'],
+    'Last Hits':   ['last_hits'],
+    'Gold Per Min':['gold_per_min'],
   },
 }
 
@@ -44,8 +42,21 @@ function sumFields(obj, fields) {
   return total
 }
 
-// Extract this player's stat value from a single game object.
-// PandaScore game.players entries look like: { player: {id}, kills, deaths, ... }
+// PandaScore stats endpoint returns different shapes by game.
+// Try several known key paths before giving up.
+function extractSeasonAvg(raw, fields) {
+  if (!raw) return null
+  // Try nested averages/per_game keys first
+  for (const key of ['averages', 'per_game', 'stats']) {
+    const v = sumFields(raw[key], fields)
+    if (v !== null) return v
+  }
+  // Try flat root object (some endpoints return stats at top level)
+  return sumFields(raw, fields)
+}
+
+// Extract player stats from a single game object.
+// PandaScore game.players entries: { player: {id}, kills, deaths, … }
 function statFromGame(game, playerId, fields) {
   const players = game.players || game.results || []
   const entry = players.find(
@@ -54,8 +65,7 @@ function statFromGame(game, playerId, fields) {
   return entry ? sumFields(entry, fields) : null
 }
 
-// Compute average of a stat across the last 5 completed games.
-function last5Avg(recentGames, playerId, fields) {
+function computeLast5(recentGames, playerId, fields) {
   if (!Array.isArray(recentGames) || !recentGames.length) return null
   const values = []
   for (const game of recentGames.slice(0, 5)) {
@@ -72,8 +82,9 @@ async function apiFetch(params) {
   return res.json().catch(() => null)
 }
 
+let _firstLogDone = false // log only the first player to avoid console spam
+
 export function usePandaScore(projections) {
-  // stats[key] = { playerId, seasonRaw, recentGames, name, league }
   const [stats, setStats] = useState({})
   const [loading, setLoading] = useState(false)
   const fetchedRef = useRef(new Set())
@@ -93,11 +104,17 @@ export function usePandaScore(projections) {
     if (!uniquePlayers.length) return
     setLoading(true)
 
-    async function fetchOne(p) {
+    async function fetchOne(p, isFirst) {
       const key = `${p.league}:${p.playerName}`
       fetchedRef.current.add(key)
       try {
         const player = await apiFetch({ action: 'search', name: p.playerName, game: p.league })
+
+        if (isFirst && !_firstLogDone) {
+          _firstLogDone = true
+          console.log(`[PandaScore debug] searched "${p.playerName}" (${p.league}) → player:`, player)
+        }
+
         if (!player?.id || cancelled) return
 
         const [seasonRaw, recentGames] = await Promise.all([
@@ -105,21 +122,32 @@ export function usePandaScore(projections) {
           apiFetch({ action: 'recent_stats', playerId: player.id, game: p.league }),
         ])
 
+        if (isFirst) {
+          console.log(`[PandaScore debug] "${p.playerName}" seasonRaw:`, seasonRaw)
+          console.log(`[PandaScore debug] "${p.playerName}" recentGames (${recentGames?.length ?? 0}):`, recentGames?.[0])
+        }
+
         if (cancelled) return
         setStats(prev => ({
           ...prev,
-          [key]: { playerId: player.id, seasonRaw, recentGames: recentGames || [], name: p.playerName, league: p.league },
+          [key]: {
+            playerId: player.id,
+            seasonRaw,
+            recentGames: Array.isArray(recentGames) ? recentGames : [],
+            name: p.playerName,
+            league: p.league,
+          },
         }))
-      } catch {}
+      } catch (err) {
+        console.warn(`[PandaScore] failed for "${p.playerName}" (${p.league}):`, err.message)
+      }
     }
 
-    Promise.allSettled(uniquePlayers.map(fetchOne))
+    Promise.allSettled(uniquePlayers.map((p, i) => fetchOne(p, i === 0)))
       .finally(() => { if (!cancelled) setLoading(false) })
 
     return () => { cancelled = true }
   }, [projections])
-
-  // ── Public API ─────────────────────────────────────────────────────────────
 
   const getStatLine = useCallback((playerName, league, statType) => {
     const key = `${league}:${playerName}`
@@ -129,22 +157,18 @@ export function usePandaScore(projections) {
     const fields = (STAT_MAP[league] || {})[statType]
     if (!fields) return null
 
-    const seasonAvg = sumFields(entry.seasonRaw?.averages ?? entry.seasonRaw, fields)
-    const l5 = last5Avg(entry.recentGames, entry.playerId, fields)
+    const seasonAvg = extractSeasonAvg(entry.seasonRaw, fields)
+    const l5 = computeLast5(entry.recentGames, entry.playerId, fields)
 
     return { seasonAvg, last5Avg: l5 }
   }, [stats])
 
-  // Returns a probability adjustment in [-0.08, +0.08].
-  // Positive when the player's L5 (or season) avg beats the line,
-  // negative when it trails — used to re-rank picks in the slip pool.
   const getProbBoost = useCallback((playerName, league, statType, line) => {
     if (!line) return 0
     const sl = getStatLine(playerName, league, statType)
     if (!sl) return 0
     const avg = sl.last5Avg ?? sl.seasonAvg
     if (avg === null) return 0
-    // ratio > 1 → avg beats line → positive boost
     const ratio = avg / line
     return Math.max(-0.08, Math.min(0.08, (ratio - 1) * 0.4))
   }, [getStatLine])
