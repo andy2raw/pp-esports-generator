@@ -1,19 +1,37 @@
 import { useState, useMemo } from 'react'
 import { usePrizePicks } from './hooks/usePrizePicks.js'
 import { usePandaScore } from './hooks/usePandaScore.js'
+import { useSlipTracker } from './hooks/useSlipTracker.js'
 import { bestCombos } from './utils/combos.js'
 import { fmtPct, fmtEV, probColor, calcEV } from './utils/ev.js'
 import SlipCard from './components/SlipCard.jsx'
 import StatsBadge from './components/StatsBadge.jsx'
+import SlipTracker from './components/SlipTracker.jsx'
+import DailyQuote from './components/DailyQuote.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 const LEAGUES = ['ALL', 'LOL', 'CSGO', 'VAL', 'DOTA2']
+
+// Sort projections by probability adjusted for player track record.
+// playerScores[name] is a 0-1 hit rate; defaults to 1 (no penalty) if unknown.
+function scoredSort(arr, playerScores) {
+  return [...arr].sort((a, b) => {
+    const sa = a.probability * (playerScores[a.playerName] ?? 1)
+    const sb = b.probability * (playerScores[b.playerName] ?? 1)
+    return sb - sa
+  })
+}
 
 export default function App() {
   const [league, setLeague] = useState('ALL')
   const { projections, loading, error, lastRefresh, countdown, refresh } = usePrizePicks()
   const { getStatLine, psLoading } = usePandaScore(projections)
+  const {
+    trackedSlips, addSlip, setResult, removeSlip,
+    playerHistory, playerScores, wins, losses, pnl, winRate, settled, pending,
+  } = useSlipTracker()
 
+  // Table view respects the active league filter
   const filtered = useMemo(
     () => league === 'ALL' ? projections : projections.filter(p => p.league === league),
     [projections, league],
@@ -28,24 +46,36 @@ export default function App() {
     [filtered],
   )
 
-  // Slips always draw from all esports leagues so there are always enough
-  // cross-team players to fill 2/4/6-leg cards. When a league filter is
-  // active, that league's players are sorted to the front of the pool so
-  // they appear in slips preferentially; other leagues fill any gaps.
+  // Slip pool for 2-leg and 4-leg: prioritize selected league, fall back to
+  // all esports. Goblins are included — labeled clearly in SlipCard.
+  // Player score sorting deprioritizes historically unreliable players.
   const slipPool = useMemo(() => {
-    const all = projections.filter(p => p.oddsType !== 'goblin')
-    if (league === 'ALL') return all.sort((a, b) => b.probability - a.probability)
-    const primary = all.filter(p => p.league === league).sort((a, b) => b.probability - a.probability)
-    const secondary = all.filter(p => p.league !== league).sort((a, b) => b.probability - a.probability)
+    if (league === 'ALL') {
+      return scoredSort(projections, playerScores)
+    }
+    const primary = scoredSort(projections.filter(p => p.league === league), playerScores)
+    const secondary = scoredSort(projections.filter(p => p.league !== league), playerScores)
     return [...primary, ...secondary]
-  }, [projections, league])
+  }, [projections, league, playerScores])
+
+  // Lottery pool: always all leagues, score-sorted
+  const lotteryPool = useMemo(
+    () => scoredSort(projections, playerScores),
+    [projections, playerScores],
+  )
 
   const combos2 = useMemo(() => bestCombos(slipPool, 2, 3), [slipPool])
   const combos4 = useMemo(() => bestCombos(slipPool, 4, 3), [slipPool])
-  const combos6 = useMemo(() => bestCombos(slipPool, 6, 3), [slipPool])
+  const lotterySlip = useMemo(() => bestCombos(lotteryPool, 6, 1)[0] ?? null, [lotteryPool])
+
+  const hasSlips = combos2.length > 0 || combos4.length > 0 || lotterySlip
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--cream)', fontFamily: 'system-ui, sans-serif' }}>
+      <ErrorBoundary label="Quote failed">
+        <DailyQuote />
+      </ErrorBoundary>
+
       <header style={{
         background: '#181818', borderBottom: '1px solid #2a2a2a',
         padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -104,25 +134,30 @@ export default function App() {
         <p style={{ margin: '0 0 14px', fontSize: 11, color: '#555', lineHeight: 1.5 }}>
           Esports lines are mostly Goblin picks — negative EV is expected. Focus on highest probability picks.
         </p>
-        {(combos2.length > 0 || combos4.length > 0 || combos6.length > 0) && (
+
+        {hasSlips && (
           <ErrorBoundary label="Slip cards error">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 28 }}>
               {combos2.length > 0 && (
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>2-LEG SLIPS</div>
-                  {combos2.map((c, i) => <SlipCard key={i} combo={c} rank={i + 1} />)}
+                  {combos2.map((c, i) => (
+                    <SlipCard key={i} combo={c} rank={i + 1} onTrack={addSlip} />
+                  ))}
                 </div>
               )}
               {combos4.length > 0 && (
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>4-LEG SLIPS</div>
-                  {combos4.map((c, i) => <SlipCard key={i} combo={c} rank={i + 1} />)}
+                  {combos4.map((c, i) => (
+                    <SlipCard key={i} combo={c} rank={i + 1} onTrack={addSlip} />
+                  ))}
                 </div>
               )}
-              {combos6.length > 0 && (
+              {lotterySlip && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>6-LEG SLIPS</div>
-                  {combos6.map((c, i) => <SlipCard key={i} combo={c} rank={i + 1} />)}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', letterSpacing: 1, marginBottom: 8 }}>6-LEG LOTTERY</div>
+                  <SlipCard combo={lotterySlip} rank={1} variant="lottery" onTrack={addSlip} />
                 </div>
               )}
             </div>
@@ -157,6 +192,7 @@ export default function App() {
                     const ev2 = calcEV(p.probability, 2, goblin ? 1 : 0)
                     const ev4 = calcEV(p.probability, 4, goblin ? 1 : 0)
                     const sl = getStatLine(p.playerName, p.league, p.statType)
+                    const hasHistory = playerHistory[p.playerName]
                     return (
                       <tr key={p.id} style={{ borderBottom: '1px solid #1f1f1f' }}>
                         <td style={{ padding: '9px 10px', color: 'var(--cream)', fontWeight: 600, whiteSpace: 'nowrap' }}>
@@ -166,6 +202,11 @@ export default function App() {
                               marginLeft: 5, fontSize: 9, background: '#f59e0b22', color: '#f59e0b',
                               border: '1px solid #f59e0b55', borderRadius: 3, padding: '1px 4px',
                             }}>GOB</span>
+                          )}
+                          {hasHistory && (
+                            <span style={{ marginLeft: 5, fontSize: 9, color: hasHistory.hits >= hasHistory.misses ? 'var(--green)' : 'var(--red)' }}>
+                              {hasHistory.hits}W {hasHistory.misses}L
+                            </span>
                           )}
                         </td>
                         <td style={{ padding: '9px 10px', color: '#888', whiteSpace: 'nowrap' }}>{p.team || '—'}</td>
@@ -195,6 +236,21 @@ export default function App() {
               </table>
             </div>
           )}
+        </ErrorBoundary>
+
+        <ErrorBoundary label="Slip tracker error">
+          <SlipTracker
+            trackedSlips={trackedSlips}
+            setResult={setResult}
+            removeSlip={removeSlip}
+            playerHistory={playerHistory}
+            wins={wins}
+            losses={losses}
+            pnl={pnl}
+            winRate={winRate}
+            settled={settled}
+            pending={pending}
+          />
         </ErrorBoundary>
       </div>
     </div>
