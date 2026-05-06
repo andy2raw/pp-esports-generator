@@ -69,7 +69,23 @@ export function usePrizePicks() {
         .filter(Boolean)
         .filter(p => !/\bMAPS?\b/i.test(p.playerName))
 
-      setProjections(parsed)
+      // Deduplicate: one prop per player+stat. Prefer the non-goblin line;
+      // only keep the goblin version when no standard line exists.
+      const seen = new Map()
+      for (const p of parsed) {
+        const key = `${p.playerName}::${p.statType}`
+        const existing = seen.get(key)
+        if (!existing) {
+          seen.set(key, p)
+        } else if (existing.oddsType === 'goblin' && p.oddsType !== 'goblin') {
+          // Replace goblin with the standard line
+          seen.set(key, p)
+        }
+        // If existing is standard and current is goblin, skip current
+      }
+      const deduped = [...seen.values()]
+
+      setProjections(deduped)
       setLastRefresh(new Date())
       setCountdown(300)
     } catch (e) {
