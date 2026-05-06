@@ -25,16 +25,28 @@ function scoredSort(arr, playerScores) {
 export default function App() {
   const [league, setLeague] = useState('ALL')
   const { projections, loading, error, lastRefresh, countdown, refresh } = usePrizePicks()
-  const { getStatLine, psLoading } = usePandaScore(projections)
+  const { getStatLine, getProbBoost, psLoading } = usePandaScore(projections)
   const {
     trackedSlips, addSlip, setResult, removeSlip,
     playerHistory, playerScores, wins, losses, pnl, winRate, settled, pending,
   } = useSlipTracker()
 
+  // Apply PandaScore L5/season avg boost to each projection's probability.
+  // This makes the displayed probability and slip rankings reflect real
+  // player performance against the line, not just PrizePicks metadata.
+  const adjustedProjections = useMemo(
+    () => projections.map(p => {
+      const boost = getProbBoost(p.playerName, p.league, p.statType, p.line)
+      if (!boost) return p
+      return { ...p, probability: Math.min(0.74, Math.max(0.46, p.probability + boost)) }
+    }),
+    [projections, getProbBoost],
+  )
+
   // Table view respects the active league filter
   const filtered = useMemo(
-    () => league === 'ALL' ? projections : projections.filter(p => p.league === league),
-    [projections, league],
+    () => league === 'ALL' ? adjustedProjections : adjustedProjections.filter(p => p.league === league),
+    [adjustedProjections, league],
   )
 
   const sorted = useMemo(
@@ -46,22 +58,21 @@ export default function App() {
     [filtered],
   )
 
-  // Slip pool for 2-leg and 4-leg: prioritize selected league, fall back to
-  // all esports. Goblins are included — labeled clearly in SlipCard.
-  // Player score sorting deprioritizes historically unreliable players.
+  // Slip pool uses adjusted probabilities + tracker history scores so both
+  // PandaScore L5 data and personal W/L record influence pick ranking.
   const slipPool = useMemo(() => {
     if (league === 'ALL') {
-      return scoredSort(projections, playerScores)
+      return scoredSort(adjustedProjections, playerScores)
     }
-    const primary = scoredSort(projections.filter(p => p.league === league), playerScores)
-    const secondary = scoredSort(projections.filter(p => p.league !== league), playerScores)
+    const primary = scoredSort(adjustedProjections.filter(p => p.league === league), playerScores)
+    const secondary = scoredSort(adjustedProjections.filter(p => p.league !== league), playerScores)
     return [...primary, ...secondary]
-  }, [projections, league, playerScores])
+  }, [adjustedProjections, league, playerScores])
 
-  // Lottery pool: always all leagues, score-sorted
+  // Lottery pool: always all leagues, adjusted probabilities
   const lotteryPool = useMemo(
-    () => scoredSort(projections, playerScores),
-    [projections, playerScores],
+    () => scoredSort(adjustedProjections, playerScores),
+    [adjustedProjections, playerScores],
   )
 
   const combos2 = useMemo(() => bestCombos(slipPool, 2, 3), [slipPool])
