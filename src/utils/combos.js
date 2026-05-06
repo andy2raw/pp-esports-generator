@@ -10,24 +10,24 @@ function combinations(arr, k) {
   ]
 }
 
-// Two players share a match if they have the same league + startTime.
-// PrizePicks rules prohibit combining players from the same match.
+// Only reject picks where two players share the exact same team name.
+// Players from opposing teams in the same match can be combined freely.
 function isValidSlip(picks) {
   const seen = new Set()
   for (const p of picks) {
-    const key = `${p.league}:${p.startTime}`
-    if (seen.has(key)) return false
-    seen.add(key)
+    if (!p.team) continue
+    if (seen.has(p.team)) return false
+    seen.add(p.team)
   }
   return true
 }
 
+// Caller must pre-sort projections in desired priority order.
+// Pool is the top-N from that ordered list.
 export function bestCombos(projections, legCount, limit = 5) {
   if (projections.length < legCount) return []
 
-  const pool = [...projections]
-    .sort((a, b) => b.probability - a.probability)
-    .slice(0, Math.min(20, projections.length))
+  const pool = projections.slice(0, Math.min(20, projections.length))
 
   return combinations(pool, legCount)
     .filter(isValidSlip)
@@ -40,22 +40,4 @@ export function bestCombos(projections, legCount, limit = 5) {
     })
     .sort((a, b) => b.ev - a.ev)
     .slice(0, limit)
-}
-
-// Groups projections by match (league + startTime), sorted by start time.
-// Each group has the players ranked by probability so the user knows
-// which single player to pick from that match.
-export function groupByMatch(projections) {
-  const groups = new Map()
-  for (const p of projections) {
-    const key = `${p.league}:${p.startTime}`
-    if (!groups.has(key)) {
-      groups.set(key, { key, league: p.league, startTime: p.startTime, picks: [] })
-    }
-    groups.get(key).picks.push(p)
-  }
-  for (const g of groups.values()) {
-    g.picks.sort((a, b) => b.probability - a.probability)
-  }
-  return [...groups.values()].sort((a, b) => new Date(a.startTime) - new Date(b.startTime))
 }

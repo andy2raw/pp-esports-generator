@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { usePrizePicks } from './hooks/usePrizePicks.js'
 import { usePandaScore } from './hooks/usePandaScore.js'
-import { bestCombos, groupByMatch } from './utils/combos.js'
+import { bestCombos } from './utils/combos.js'
 import { fmtPct, fmtEV, probColor, calcEV } from './utils/ev.js'
 import SlipCard from './components/SlipCard.jsx'
 import StatsBadge from './components/StatsBadge.jsx'
@@ -28,11 +28,21 @@ export default function App() {
     [filtered],
   )
 
-  const slipPool = useMemo(() => filtered.filter(p => p.oddsType !== 'goblin'), [filtered])
+  // Slips always draw from all esports leagues so there are always enough
+  // cross-team players to fill 2/4/6-leg cards. When a league filter is
+  // active, that league's players are sorted to the front of the pool so
+  // they appear in slips preferentially; other leagues fill any gaps.
+  const slipPool = useMemo(() => {
+    const all = projections.filter(p => p.oddsType !== 'goblin')
+    if (league === 'ALL') return all.sort((a, b) => b.probability - a.probability)
+    const primary = all.filter(p => p.league === league).sort((a, b) => b.probability - a.probability)
+    const secondary = all.filter(p => p.league !== league).sort((a, b) => b.probability - a.probability)
+    return [...primary, ...secondary]
+  }, [projections, league])
+
   const combos2 = useMemo(() => bestCombos(slipPool, 2, 3), [slipPool])
   const combos4 = useMemo(() => bestCombos(slipPool, 4, 3), [slipPool])
   const combos6 = useMemo(() => bestCombos(slipPool, 6, 3), [slipPool])
-  const matchGroups = useMemo(() => groupByMatch(sorted), [sorted])
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--cream)', fontFamily: 'system-ui, sans-serif' }}>
@@ -115,52 +125,6 @@ export default function App() {
                   {combos6.map((c, i) => <SlipCard key={i} combo={c} rank={i + 1} />)}
                 </div>
               )}
-            </div>
-          </ErrorBoundary>
-        )}
-
-        {matchGroups.length > 0 && (
-          <ErrorBoundary label="Match picks error">
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 10 }}>
-                BEST SINGLE MATCH PICKS
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
-                {matchGroups.map(group => {
-                  const time = group.startTime
-                    ? new Date(group.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    : ''
-                  return (
-                    <div key={group.key} style={{ background: '#242424', border: '1px solid #2e2e2e', borderRadius: 8, padding: '10px 12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: '#555', letterSpacing: 0.5 }}>{group.league}</span>
-                        {time && <span style={{ fontSize: 10, color: '#444' }}>{time}</span>}
-                      </div>
-                      {group.picks.map((p, i) => (
-                        <div key={p.id} style={{
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '5px 8px', borderRadius: 5, marginBottom: 4,
-                          background: i === 0 ? '#1a2e1a' : '#1c1c1c',
-                          border: i === 0 ? '1px solid #22c55e33' : '1px solid transparent',
-                        }}>
-                          <div style={{ minWidth: 0 }}>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: i === 0 ? 'var(--cream)' : '#aaa', marginRight: 5 }}>
-                              {p.playerName}
-                            </span>
-                            <span style={{ fontSize: 10, color: '#555' }}>{p.statType} O{p.line}</span>
-                            {p.team && (
-                              <div style={{ fontSize: 9, color: '#444', marginTop: 1 }}>{p.team}</div>
-                            )}
-                          </div>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: probColor(p.probability), whiteSpace: 'nowrap', marginLeft: 8 }}>
-                            {fmtPct(p.probability)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })}
-              </div>
             </div>
           </ErrorBoundary>
         )}
