@@ -29,6 +29,7 @@ export default function App() {
   const {
     trackedSlips, addSlip, setResult, removeSlip,
     playerHistory, playerScores, wins, losses, pnl, winRate, settled, pending,
+    supabaseLoading,
   } = useSlipTracker()
 
   // Apply PandaScore L5/season avg boost to each projection's probability.
@@ -153,7 +154,7 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>2-LEG SLIPS</div>
                   {combos2.map((c, i) => (
-                    <SlipCard key={i} combo={c} rank={i + 1} onTrack={addSlip} />
+                    <SlipCard key={i} combo={c} rank={i + 1} onTrack={(combo) => addSlip(combo, '2-leg', league)} />
                   ))}
                 </div>
               )}
@@ -161,14 +162,14 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>4-LEG SLIPS</div>
                   {combos4.map((c, i) => (
-                    <SlipCard key={i} combo={c} rank={i + 1} onTrack={addSlip} />
+                    <SlipCard key={i} combo={c} rank={i + 1} onTrack={(combo) => addSlip(combo, '4-leg', league)} />
                   ))}
                 </div>
               )}
               {lotterySlip && (
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', letterSpacing: 1, marginBottom: 8 }}>6-LEG LOTTERY</div>
-                  <SlipCard combo={lotterySlip} rank={1} variant="lottery" onTrack={addSlip} />
+                  <SlipCard combo={lotterySlip} rank={1} variant="lottery" onTrack={(combo) => addSlip(combo, 'lottery-6', 'ALL')} />
                 </div>
               )}
             </div>
@@ -261,6 +262,7 @@ export default function App() {
             winRate={winRate}
             settled={settled}
             pending={pending}
+            supabaseLoading={supabaseLoading}
           />
         </ErrorBoundary>
       </div>
