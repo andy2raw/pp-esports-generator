@@ -3,7 +3,7 @@ import { usePrizePicks } from './hooks/usePrizePicks.js'
 import { usePandaScore } from './hooks/usePandaScore.js'
 import { useSlipTracker } from './hooks/useSlipTracker.js'
 import { bestCombos } from './utils/combos.js'
-import { fmtPct, fmtEV, probColor, calcEV, calcConfidence, lineBasedProb } from './utils/ev.js'
+import { fmtPct, fmtEV, probColor, calcEV, calcConfidence } from './utils/ev.js'
 import SlipCard from './components/SlipCard.jsx'
 import StatsBadge from './components/StatsBadge.jsx'
 import SlipTracker from './components/SlipTracker.jsx'
@@ -33,11 +33,10 @@ export default function App() {
   } = useSlipTracker()
 
   // Use server-computed probability when available (based on real L5/season vs line).
-  // Falls back to lineBasedProb heuristic while the stats API is still loading.
+  // Falls back to p.probability (estimateProb from PrizePicks metadata) while loading.
   const adjustedProjections = useMemo(
     () => projections.map(p => {
-      const prob = getCalcProb(p.playerName, p.league, p.statType)
-                ?? lineBasedProb(p.line, p.league, p.statType)
+      const prob = getCalcProb(p.playerName, p.league, p.statType) ?? p.probability
       return { ...p, probability: prob }
     }),
     [projections, getCalcProb],

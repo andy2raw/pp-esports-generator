@@ -42,7 +42,7 @@ export function usePandaScore(projections) {
         fetchedRef.current.add(key)
         const result = await fetchStats(p.playerName, p.league, p.statType, p.line)
         if (cancelled || !result) return
-        if (result.seasonAvg !== null || result.last5Avg !== null || result.probability != null) {
+        if (result) {
           setStats(prev => ({ ...prev, [key]: result }))
         }
       }),

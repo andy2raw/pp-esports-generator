@@ -35,12 +35,17 @@ function correlationFactor(picks) {
 
 // Caller must pre-sort projections in desired priority order.
 // Pool is the top-N from that ordered list.
+// Each player appears in at most MAX_PLAYER_APPEARANCES combos in the returned list
+// so the same props don't dominate every slot.
+const MAX_PLAYER_APPEARANCES = 2
+
 export function bestCombos(projections, legCount, limit = 5) {
   if (projections.length < legCount) return []
 
-  const pool = projections.slice(0, Math.min(20, projections.length))
+  // Expand pool so rotation has enough candidates after the appearance cap.
+  const pool = projections.slice(0, Math.min(30, projections.length))
 
-  return combinations(pool, legCount)
+  const scored = combinations(pool, legCount)
     .filter(isValidSlip)
     .map(picks => {
       const goblinCount = picks.filter(p => p.oddsType === 'goblin').length
@@ -50,5 +55,21 @@ export function bestCombos(projections, legCount, limit = 5) {
       return { picks, ev, jointProb, goblinCount }
     })
     .sort((a, b) => b.ev - a.ev)
-    .slice(0, limit)
+
+  // Greedy rotation: accept a combo only if every player in it still has
+  // appearances remaining. This forces diversity across the returned list.
+  const appearances = {}
+  const result = []
+  for (const combo of scored) {
+    if (result.length >= limit) break
+    const overLimit = combo.picks.some(
+      p => (appearances[p.playerName] ?? 0) >= MAX_PLAYER_APPEARANCES,
+    )
+    if (overLimit) continue
+    result.push(combo)
+    for (const p of combo.picks) {
+      appearances[p.playerName] = (appearances[p.playerName] ?? 0) + 1
+    }
+  }
+  return result
 }
