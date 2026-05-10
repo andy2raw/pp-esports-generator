@@ -91,7 +91,6 @@ async function psGet(path) {
 function avg(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null }
 
 // ── PandaScore shared helper ──────────────────────────────────────────────────
-// Used for both CSGO and VAL. Returns { seasonAvg, last5Avg, source } or null.
 const PS_FIELDS = {
   Kills:     ['kills'],
   Deaths:    ['deaths'],
@@ -99,19 +98,38 @@ const PS_FIELDS = {
   Headshots: ['headshots'],
 }
 
+// Dedicated search that always logs [PS result] with HTTP status + count.
+async function psSearch(gameSlug, name) {
+  const url = `https://api.pandascore.co/${gameSlug}/players?search[name]=${encodeURIComponent(name)}&per_page=5`
+  try {
+    const controller = new AbortController()
+    const t = setTimeout(() => controller.abort(), 7000)
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${PANDASCORE_KEY}` },
+    })
+    clearTimeout(t)
+    const data = res.ok ? (await res.json().catch(() => [])) : []
+    const count = Array.isArray(data) ? data.length : 0
+    const first = count > 0 ? `first="${data[0].name}"` : 'no results'
+    console.log(`[PS result] ${gameSlug} "${name}" → HTTP ${res.status} count=${count} ${first}`)
+    return res.ok && count > 0 ? data : null
+  } catch (e) {
+    console.log(`[PS result] ${gameSlug} "${name}" → error: ${e.message}`)
+    return null
+  }
+}
+
 async function getPandaScoreStats(gameSlug, name, statType) {
   const fields = PS_FIELDS[statType]
-  if (!fields) return null
+  if (!fields) {
+    console.log(`[PS skip] ${gameSlug} "${name}" statType="${statType}" not in PS_FIELDS`)
+    return null
+  }
 
-  // 1 — Search for player
-  const searchUrl = `/${gameSlug}/players?search[name]=${encodeURIComponent(name)}&per_page=5`
-  const players = await psGet(searchUrl)
-  console.log(
-    `[PS search] ${gameSlug} "${name}" → ` +
-    JSON.stringify(players?.slice?.(0, 3)?.map(p => ({ id: p.id, name: p.name, slug: p.slug }))),
-  )
-
-  if (!Array.isArray(players) || !players.length) return null
+  // 1 — Search for player (always logs [PS result])
+  const players = await psSearch(gameSlug, name)
+  if (!players) return null
 
   const nl = name.toLowerCase()
   const player =
