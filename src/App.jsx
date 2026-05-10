@@ -3,7 +3,7 @@ import { usePrizePicks } from './hooks/usePrizePicks.js'
 import { usePandaScore } from './hooks/usePandaScore.js'
 import { useSlipTracker } from './hooks/useSlipTracker.js'
 import { bestCombos } from './utils/combos.js'
-import { fmtPct, fmtEV, probColor, calcEV } from './utils/ev.js'
+import { fmtPct, fmtEV, probColor, calcEV, calcConfidence } from './utils/ev.js'
 import SlipCard from './components/SlipCard.jsx'
 import StatsBadge from './components/StatsBadge.jsx'
 import SlipTracker from './components/SlipTracker.jsx'
@@ -76,9 +76,26 @@ export default function App() {
     [adjustedProjections, playerScores],
   )
 
-  const combos2 = useMemo(() => bestCombos(slipPool, 2, 3), [slipPool])
-  const combos4 = useMemo(() => bestCombos(slipPool, 4, 3), [slipPool])
-  const lotterySlip = useMemo(() => bestCombos(lotteryPool, 6, 1)[0] ?? null, [lotteryPool])
+  const combos2Raw     = useMemo(() => bestCombos(slipPool, 2, 3),       [slipPool])
+  const combos4Raw     = useMemo(() => bestCombos(slipPool, 4, 3),       [slipPool])
+  const lotterySlipRaw = useMemo(() => bestCombos(lotteryPool, 6, 1)[0] ?? null, [lotteryPool])
+
+  // Attach a 1-10 confidence score to each combo.
+  // Recomputed whenever stats or player history update.
+  const combos2 = useMemo(
+    () => combos2Raw.map(c => ({ ...c, confidence: calcConfidence(c, getStatLine, playerHistory) })),
+    [combos2Raw, getStatLine, playerHistory],
+  )
+  const combos4 = useMemo(
+    () => combos4Raw.map(c => ({ ...c, confidence: calcConfidence(c, getStatLine, playerHistory) })),
+    [combos4Raw, getStatLine, playerHistory],
+  )
+  const lotterySlip = useMemo(
+    () => lotterySlipRaw
+      ? { ...lotterySlipRaw, confidence: calcConfidence(lotterySlipRaw, getStatLine, playerHistory) }
+      : null,
+    [lotterySlipRaw, getStatLine, playerHistory],
+  )
 
   const hasSlips = combos2.length > 0 || combos4.length > 0 || lotterySlip
 
@@ -178,7 +195,7 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>2-LEG SLIPS</div>
                   {combos2.map((c, i) => (
-                    <SlipCard key={i} combo={c} rank={i + 1} />
+                    <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence} />
                   ))}
                 </div>
               )}
@@ -186,14 +203,14 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>4-LEG SLIPS</div>
                   {combos4.map((c, i) => (
-                    <SlipCard key={i} combo={c} rank={i + 1} />
+                    <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence} />
                   ))}
                 </div>
               )}
               {lotterySlip && (
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', letterSpacing: 1, marginBottom: 8 }}>6-LEG LOTTERY</div>
-                  <SlipCard combo={lotterySlip} rank={1} variant="lottery" />
+                  <SlipCard combo={lotterySlip} rank={1} variant="lottery" confidence={lotterySlip.confidence} />
                 </div>
               )}
             </div>

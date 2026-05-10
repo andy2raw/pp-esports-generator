@@ -36,6 +36,40 @@ export function probColor(p) {
   return 'var(--red)'
 }
 
+// Confidence score 1–10 combining hit probability, stats trend, player history.
+// Returns an integer. Neutral (0.5) is used when a factor has no data.
+export function calcConfidence(combo, getStatLine, playerHistory) {
+  const { picks } = combo
+  if (!picks?.length) return 5
+
+  // 1) Average per-leg hit probability, normalised to 0–1 over [0.46, 0.74]
+  const avgProb = picks.reduce((s, p) => s + p.probability, 0) / picks.length
+  const probScore = Math.max(0, Math.min(1, (avgProb - 0.46) / 0.28))
+
+  // 2) Stats trend: fraction of picks where L5/season avg meets the line
+  const trendValues = picks.map(p => {
+    const sl = getStatLine(p.playerName, p.league, p.statType)
+    const a = sl?.last5Avg ?? sl?.seasonAvg ?? null
+    if (a === null) return null
+    return a >= p.line ? 1 : a >= p.line - 2 ? 0.5 : 0
+  }).filter(v => v !== null)
+  const trendScore = trendValues.length
+    ? trendValues.reduce((a, b) => a + b, 0) / trendValues.length
+    : 0.5
+
+  // 3) Player history win-rate (requires ≥2 settled slips per player)
+  const histValues = picks.map(p => {
+    const h = playerHistory[p.playerName]
+    return h && h.hits + h.misses >= 2 ? h.hits / (h.hits + h.misses) : null
+  }).filter(v => v !== null)
+  const histScore = histValues.length
+    ? histValues.reduce((a, b) => a + b, 0) / histValues.length
+    : 0.5
+
+  const composite = probScore * 0.5 + trendScore * 0.3 + histScore * 0.2
+  return Math.max(1, Math.min(10, Math.round(composite * 9 + 1)))
+}
+
 export function estimateProb(attrs) {
   let p = 0.54
   if (attrs.is_promo) p += 0.04
