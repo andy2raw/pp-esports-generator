@@ -91,13 +91,51 @@ async function psGet(path) {
 function avg(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null }
 
 // ── Probability calculation ───────────────────────────────────────────────────
-// Returns null when no stats data is available so the client falls back to
-// its own estimateProb (PrizePicks odds-type metadata). Never invents a number.
+// Per-map kill averages used when no player stats are available.
+// Multi-map (Maps 1-2) averages are provided separately.
+const KILL_AVG = {
+  single:   { CSGO: 16, CS2: 16, VAL: 20, LOL: 6,  DOTA2: 8  },
+  multimap: { CSGO: 28, CS2: 28, VAL: 35, LOL: 12, DOTA2: 16 },
+}
+
+function lineHeuristic(line, game, statType) {
+  const g  = (game || '').toUpperCase()
+  const st = (statType || '').toLowerCase()
+
+  if (st.includes('kill')) {
+    const isMultiMap = /1-2|1-3|combo/i.test(statType)
+    const avgs  = isMultiMap ? KILL_AVG.multimap : KILL_AVG.single
+    const typical = avgs[g]
+    if (typical) {
+      const ratio = line / typical
+      if (ratio < 0.80)  {
+        console.log(`[prob] ${game} "${statType}" line=${line} typical=${typical} ratio=${ratio.toFixed(2)} → 0.640 (easy_over)`)
+        return 0.64
+      }
+      if (ratio < 0.90)  {
+        console.log(`[prob] ${game} "${statType}" line=${line} typical=${typical} ratio=${ratio.toFixed(2)} → 0.590 (below_avg)`)
+        return 0.59
+      }
+      if (ratio <= 1.10) {
+        console.log(`[prob] ${game} "${statType}" line=${line} typical=${typical} ratio=${ratio.toFixed(2)} → 0.540 (fair)`)
+        return 0.54
+      }
+      console.log(`[prob] ${game} "${statType}" line=${line} typical=${typical} ratio=${ratio.toFixed(2)} → 0.440 (tough_over)`)
+      return 0.44
+    }
+  }
+
+  // Non-kills or unknown game: neutral, not 0.55
+  return 0.54
+}
+
 function calcProb(name, game, statType, line, seasonAvg, last5Avg) {
-  if (!line || line <= 0) return null
+  if (!line || line <= 0) return lineHeuristic(line || 0, game, statType)
   const l5 = last5Avg
   const szn = seasonAvg
-  if (szn == null && l5 == null) return null   // no real stats → skip, client decides
+  if (szn == null && l5 == null) {
+    return lineHeuristic(line, game, statType)
+  }
 
   const l5Above  = l5 != null && l5 > line
   const sznAbove = szn != null && szn > line
@@ -384,7 +422,7 @@ export default async function handler(req, res) {
   if (cached !== undefined) {
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60')
     const probability = calcProb(name, game, statType, line, cached.seasonAvg, cached.last5Avg)
-    return res.json(probability != null ? { ...cached, probability } : cached)
+    return res.json({ ...cached, probability })
   }
 
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60')
@@ -405,11 +443,12 @@ export default async function handler(req, res) {
     )
     setCached(cacheKey, out)
     const probability = calcProb(name, game, statType, line, out.seasonAvg, out.last5Avg)
-    return res.json(probability != null ? { ...out, probability } : out)
+    return res.json({ ...out, probability })
   } catch (e) {
     console.error(`[esports-stats] error ${game} "${name}":`, e.message)
     const out = { seasonAvg: null, last5Avg: null, source: null }
     setCached(cacheKey, out)
-    return res.json(out)
+    const probability = lineHeuristic(line, game, statType)
+    return res.json({ ...out, probability })
   }
 }
