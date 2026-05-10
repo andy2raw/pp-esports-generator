@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { fmtPct, probColor } from '../utils/ev.js'
 
 const RESULTS = ['Win', 'Loss', 'Pending']
@@ -27,6 +28,22 @@ export default function SlipTracker({
   playerHistory, wins, losses, pnl, winRate, settled, pending,
   supabaseLoading,
 }) {
+  // { slipId: 'win' | 'loss' } — clears after animation duration
+  const [flashing, setFlashing] = useState({})
+
+  function handleSetResult(id, result) {
+    setResult(id, result)
+    if (result === 'Win' || result === 'Loss') {
+      const flashKey = result.toLowerCase()
+      setFlashing(prev => ({ ...prev, [id]: flashKey }))
+      setTimeout(() => setFlashing(prev => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      }), 750)
+    }
+  }
+
   const reliablePlayers = Object.values(playerHistory)
     .filter(p => p.hits + p.misses >= 2)
     .map(p => ({ ...p, rate: p.hits / (p.hits + p.misses) }))
@@ -85,103 +102,117 @@ export default function SlipTracker({
         </div>
       ) : trackedSlips.length === 0 ? (
         <div style={{ color: '#3a3a3a', fontSize: 12, padding: '28px 0', textAlign: 'center' }}>
-          No tracked slips yet — click Track on any slip card.
+          No tracked slips yet — slips are saved automatically when the generator loads.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {trackedSlips.map(slip => (
-            <div key={slip.id} style={{
-              background: '#202020',
-              border: `1px solid ${borderColor(slip.result)}`,
-              borderRadius: 8, padding: '11px 14px',
-            }}>
-              {/* Header row: timestamp + result buttons */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7, flexWrap: 'wrap', gap: 6 }}>
-                <span style={{ fontSize: 10, color: '#555' }}>
-                  {fmtDate(slip.timestamp)} · {slip.slipType || `${slip.legCount}-leg`}
-                  {slip.goblinCount > 0 && <span style={{ color: '#f59e0b', marginLeft: 5 }}>{slip.goblinCount} gob</span>}
-                </span>
-                <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-                  {RESULTS.map(r => {
-                    const isActive = slip.result === r
-                    const s = RESULT_STYLE[r]
+          {trackedSlips.map(slip => {
+            const flashClass = flashing[slip.id]
+              ? (flashing[slip.id] === 'win' ? 'slip-flash-win' : 'slip-flash-loss')
+              : ''
+            return (
+              <div
+                key={slip.id}
+                className={`tracker-slip ${flashClass}`}
+                style={{
+                  background: '#202020',
+                  border: `1px solid ${borderColor(slip.result)}`,
+                  borderRadius: 8, padding: '11px 14px',
+                  transition: 'border-color 0.3s',
+                }}
+              >
+                {/* Header row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                  <span style={{ fontSize: 10, color: '#555' }}>
+                    {fmtDate(slip.timestamp)} · {slip.slipType || `${slip.legCount}-leg`}
+                    {slip.goblinCount > 0 && <span style={{ color: '#f59e0b', marginLeft: 5 }}>{slip.goblinCount} gob</span>}
+                  </span>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {RESULTS.map(r => {
+                      const isActive = slip.result === r
+                      const s = RESULT_STYLE[r]
+                      return (
+                        <button
+                          key={r}
+                          className="result-btn"
+                          onClick={() => handleSetResult(slip.id, r)}
+                          style={{
+                            fontSize: 11, padding: '5px 12px', borderRadius: 5,
+                            cursor: 'pointer', fontWeight: 700, minWidth: 52,
+                            background: isActive ? s.active.bg : s.idle.bg,
+                            border:     `1px solid ${isActive ? s.active.bg : s.idle.border}`,
+                            color:      isActive ? s.active.color : s.idle.color,
+                            transition: 'background 0.15s, color 0.15s',
+                          }}
+                        >
+                          {r}
+                        </button>
+                      )
+                    })}
+                    <button onClick={() => removeSlip(slip.id)} style={{
+                      fontSize: 13, padding: '4px 8px', borderRadius: 4, cursor: 'pointer',
+                      background: 'none', border: 'none', color: '#3a3a3a',
+                    }}>✕</button>
+                  </div>
+                </div>
+
+                {/* Player legs */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {slip.picks.map((p, i) => {
+                    const isMissed = slip.result === 'Loss' && slip.missedLeg === p.playerName
                     return (
-                      <button key={r} onClick={() => setResult(slip.id, r)} style={{
-                        fontSize: 10, padding: '3px 8px', borderRadius: 4, cursor: 'pointer', fontWeight: 600,
-                        background: isActive ? s.active.bg : s.idle.bg,
-                        border:     `1px solid ${isActive ? s.active.bg : s.idle.border}`,
-                        color:      isActive ? s.active.color : s.idle.color,
-                      }}>
-                        {r}
-                      </button>
+                      <div key={i} style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ color: isMissed ? '#ef4444' : 'var(--cream)', fontWeight: 600 }}>
+                          {p.playerName}
+                        </span>
+                        <span style={{ color: '#666' }}>{p.statType} O{p.line}</span>
+                        <span style={{ color: probColor(p.probability) }}>{fmtPct(p.probability)}</span>
+                        {p.oddsType === 'goblin' && (
+                          <span style={{ fontSize: 9, color: '#f59e0b' }}>GOBLIN</span>
+                        )}
+                        {isMissed && (
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, color: '#ef4444',
+                            background: '#ef444422', border: '1px solid #ef444455',
+                            borderRadius: 3, padding: '1px 5px', letterSpacing: 0.3,
+                          }}>MISSED</span>
+                        )}
+                      </div>
                     )
                   })}
-                  <button onClick={() => removeSlip(slip.id)} style={{
-                    fontSize: 12, padding: '2px 6px', borderRadius: 4, cursor: 'pointer',
-                    background: 'none', border: 'none', color: '#3a3a3a',
-                  }}>✕</button>
                 </div>
-              </div>
 
-              {/* Player legs */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {slip.picks.map((p, i) => {
-                  const isMissed = slip.result === 'Loss' && slip.missedLeg === p.playerName
-                  return (
-                    <div key={i} style={{ fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <span style={{ color: isMissed ? '#ef4444' : 'var(--cream)', fontWeight: 600 }}>
-                        {p.playerName}
-                      </span>
-                      <span style={{ color: '#666' }}>{p.statType} O{p.line}</span>
-                      <span style={{ color: probColor(p.probability) }}>{fmtPct(p.probability)}</span>
-                      {p.oddsType === 'goblin' && (
-                        <span style={{ fontSize: 9, color: '#f59e0b' }}>GOBLIN</span>
-                      )}
-                      {isMissed && (
-                        <span style={{
-                          fontSize: 9, fontWeight: 700, color: '#ef4444',
-                          background: '#ef444422', border: '1px solid #ef444455',
-                          borderRadius: 3, padding: '1px 4px', letterSpacing: 0.3,
-                        }}>
-                          MISSED
-                        </span>
-                      )}
+                {/* Missed-leg selector */}
+                {slip.result === 'Loss' && !slip.missedLeg && slip.picks.length > 0 && (
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #2a2a2a' }}>
+                    <div style={{ fontSize: 9, color: '#666', letterSpacing: 0.5, marginBottom: 7 }}>
+                      WHICH LEG MISSED?
                     </div>
-                  )
-                })}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {slip.picks.map((p, i) => (
+                        <button
+                          key={i}
+                          className="missed-chip"
+                          onClick={() => setMissedLeg(slip.id, p.playerName)}
+                          style={{
+                            fontSize: 11, padding: '6px 12px', borderRadius: 5, cursor: 'pointer',
+                            fontWeight: 600, background: '#2a1a1a',
+                            border: '1px solid #ef444455', color: '#ef4444',
+                            transition: 'background 0.1s',
+                            WebkitTapHighlightColor: 'transparent',
+                          }}
+                          onMouseEnter={e  => { e.currentTarget.style.background = '#ef444422' }}
+                          onMouseLeave={e  => { e.currentTarget.style.background = '#2a1a1a' }}
+                        >
+                          {p.playerName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-
-              {/* Missed leg selector — shown for Loss slips where the culprit isn't pinned yet */}
-              {slip.result === 'Loss' && !slip.missedLeg && slip.picks.length > 0 && (
-                <div style={{
-                  marginTop: 10, paddingTop: 8,
-                  borderTop: '1px solid #2a2a2a',
-                }}>
-                  <div style={{ fontSize: 9, color: '#666', letterSpacing: 0.5, marginBottom: 6 }}>
-                    WHICH LEG MISSED?
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                    {slip.picks.map((p, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setMissedLeg(slip.id, p.playerName)}
-                        style={{
-                          fontSize: 10, padding: '4px 9px', borderRadius: 4, cursor: 'pointer',
-                          fontWeight: 600, background: '#2a1a1a',
-                          border: '1px solid #ef444455', color: '#ef4444',
-                          transition: 'background 0.1s',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#ef444422' }}
-                        onMouseLeave={e => { e.currentTarget.style.background = '#2a1a1a' }}
-                      >
-                        {p.playerName}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

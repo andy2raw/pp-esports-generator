@@ -53,7 +53,7 @@ export default function SlipCard({ combo, rank, variant, confidence }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {picks.map(p => (
-          <div key={p.id} style={{
+          <div key={p.id} className="slip-card-pick" style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             padding: '6px 10px', background: isLottery ? '#17140a' : '#1c1c1c', borderRadius: 6,
           }}>
