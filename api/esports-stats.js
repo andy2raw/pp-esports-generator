@@ -1,3 +1,4 @@
+// deploy v2
 // GET /api/esports-stats?name=PlayerName&game=LOL&statType=Kills
 // Returns { seasonAvg, last5Avg, source } or { seasonAvg: null, last5Avg: null, source: null }
 
