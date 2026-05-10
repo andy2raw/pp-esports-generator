@@ -3,7 +3,7 @@ import { usePrizePicks } from './hooks/usePrizePicks.js'
 import { usePandaScore } from './hooks/usePandaScore.js'
 import { useSlipTracker } from './hooks/useSlipTracker.js'
 import { bestCombos } from './utils/combos.js'
-import { fmtPct, fmtEV, probColor, calcEV, calcConfidence } from './utils/ev.js'
+import { fmtPct, fmtEV, probColor, calcEV, calcConfidence, lineBasedProb } from './utils/ev.js'
 import SlipCard from './components/SlipCard.jsx'
 import StatsBadge from './components/StatsBadge.jsx'
 import SlipTracker from './components/SlipTracker.jsx'
@@ -25,23 +25,22 @@ function scoredSort(arr, playerScores) {
 export default function App() {
   const [league, setLeague] = useState('ALL')
   const { projections, loading, error, lastRefresh, countdown, refresh } = usePrizePicks()
-  const { getStatLine, getProbBoost, psLoading } = usePandaScore(projections)
+  const { getStatLine, getCalcProb, psLoading } = usePandaScore(projections)
   const {
     trackedSlips, addSlip, setResult, setMissedLeg, removeSlip,
     playerHistory, playerScores, wins, losses, pnl, winRate, settled, pending,
     supabaseLoading,
   } = useSlipTracker()
 
-  // Apply PandaScore L5/season avg boost to each projection's probability.
-  // This makes the displayed probability and slip rankings reflect real
-  // player performance against the line, not just PrizePicks metadata.
+  // Use server-computed probability when available (based on real L5/season vs line).
+  // Falls back to lineBasedProb heuristic while the stats API is still loading.
   const adjustedProjections = useMemo(
     () => projections.map(p => {
-      const boost = getProbBoost(p.playerName, p.league, p.statType, p.line)
-      if (!boost) return p
-      return { ...p, probability: Math.min(0.74, Math.max(0.46, p.probability + boost)) }
+      const prob = getCalcProb(p.playerName, p.league, p.statType)
+                ?? lineBasedProb(p.line, p.league, p.statType)
+      return { ...p, probability: prob }
     }),
-    [projections, getProbBoost],
+    [projections, getCalcProb],
   )
 
   // Table view respects the active league filter

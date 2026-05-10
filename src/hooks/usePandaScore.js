@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-async function fetchStats(name, game, statType) {
+async function fetchStats(name, game, statType, line) {
   try {
-    const qs = new URLSearchParams({ name, game, statType })
+    const qs = new URLSearchParams({ name, game, statType, line: String(line) })
     const res = await fetch(`/api/esports-stats?${qs}`)
     if (!res.ok) return null
     return res.json().catch(() => null)
@@ -13,7 +13,7 @@ async function fetchStats(name, game, statType) {
 
 // Renamed from usePandaScore but kept as the same export so no other file needs to change.
 export function usePandaScore(projections) {
-  // stats key: "LEAGUE:playerName:statType" → { seasonAvg, last5Avg, source }
+  // stats key: "LEAGUE:playerName:statType" → { seasonAvg, last5Avg, source, probability }
   const [stats, setStats] = useState({})
   const [loading, setLoading] = useState(false)
   const fetchedRef = useRef(new Set())
@@ -22,8 +22,6 @@ export function usePandaScore(projections) {
     if (!projections.length) return
     let cancelled = false
 
-    // Collect unique (player, league, statType) triples that haven't been fetched yet.
-    // Skip combo picks like "Sasi + climber + Saber".
     const toFetch = []
     const seen = new Set()
     for (const p of projections) {
@@ -42,9 +40,9 @@ export function usePandaScore(projections) {
       toFetch.map(async p => {
         const key = `${p.league}:${p.playerName}:${p.statType}`
         fetchedRef.current.add(key)
-        const result = await fetchStats(p.playerName, p.league, p.statType)
+        const result = await fetchStats(p.playerName, p.league, p.statType, p.line)
         if (cancelled || !result) return
-        if (result.seasonAvg !== null || result.last5Avg !== null) {
+        if (result.seasonAvg !== null || result.last5Avg !== null || result.probability != null) {
           setStats(prev => ({ ...prev, [key]: result }))
         }
       }),
@@ -59,14 +57,10 @@ export function usePandaScore(projections) {
     return { seasonAvg: entry.seasonAvg, last5Avg: entry.last5Avg }
   }, [stats])
 
-  const getProbBoost = useCallback((playerName, league, statType, line) => {
-    if (!line) return 0
-    const sl = getStatLine(playerName, league, statType)
-    if (!sl) return 0
-    const a = sl.last5Avg ?? sl.seasonAvg
-    if (a === null) return 0
-    return Math.max(-0.08, Math.min(0.08, (a / line - 1) * 0.4))
-  }, [getStatLine])
+  // Returns the server-computed probability for a pick, or null if not yet loaded.
+  const getCalcProb = useCallback((playerName, league, statType) => {
+    return stats[`${league}:${playerName}:${statType}`]?.probability ?? null
+  }, [stats])
 
-  return { getStatLine, getProbBoost, psLoading: loading }
+  return { getStatLine, getCalcProb, psLoading: loading }
 }

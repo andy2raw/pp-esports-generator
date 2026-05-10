@@ -90,6 +90,68 @@ async function psGet(path) {
 
 function avg(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null }
 
+// ── Probability calculation ───────────────────────────────────────────────────
+function lineHeuristic(line, game, statType) {
+  const st = (statType || '').toLowerCase()
+  const g = (game || '').toUpperCase()
+  let prob = 0.54
+  if (st.includes('kill')) {
+    const typical = { LOL: 6, CSGO: 16, CS2: 16, VAL: 18, DOTA2: 10 }[g] ?? 12
+    const r = line / typical
+    if (r < 0.75)      prob = 0.67
+    else if (r < 0.90) prob = 0.62
+    else if (r < 1.05) prob = 0.56
+    else if (r < 1.20) prob = 0.51
+    else               prob = 0.48
+  } else if (st.includes('death')) {
+    prob = line < 8 ? 0.64 : line < 12 ? 0.58 : line < 16 ? 0.52 : 0.48
+  } else if (st.includes('assist')) {
+    prob = line < 5 ? 0.65 : line < 8 ? 0.60 : line < 12 ? 0.55 : 0.50
+  } else if (st.includes('headshot')) {
+    prob = line < 35 ? 0.64 : line < 46 ? 0.57 : 0.50
+  }
+  return Math.min(0.70, Math.max(0.46, prob))
+}
+
+function calcProb(name, game, statType, line, seasonAvg, last5Avg) {
+  if (!line || line <= 0) return 0.54
+  const l5 = last5Avg
+  const szn = seasonAvg
+  const l5Above  = l5 != null && l5 > line
+  const sznAbove = szn != null && szn > line
+  let prob, tag
+
+  if (szn == null && l5 == null) {
+    prob = lineHeuristic(line, game, statType)
+    tag  = 'heuristic'
+  } else if (l5Above && sznAbove) {
+    const l5Ex  = l5 / line - 1
+    const sznEx = szn / line - 1
+    const avgEx = (l5Ex + sznEx) / 2
+    prob = Math.min(0.78, 0.68 + Math.min(avgEx / 0.30, 1) * 0.10)
+    tag  = `both_above l5ex=${l5Ex.toFixed(2)} sznex=${sznEx.toFixed(2)}`
+  } else if (l5Above) {
+    const ex = l5 / line - 1
+    prob = Math.min(0.72, 0.63 + Math.min(ex / 0.30, 1) * 0.09)
+    tag  = `l5_above ex=${ex.toFixed(2)}`
+  } else if (sznAbove) {
+    const ex = szn / line - 1
+    prob = Math.min(0.68, 0.58 + Math.min(ex / 0.30, 1) * 0.10)
+    tag  = `szn_above ex=${ex.toFixed(2)}`
+  } else {
+    const best = Math.max(l5 ?? 0, szn ?? 0)
+    const bf   = line > 0 ? Math.min(1, 1 - best / line) : 0
+    prob = Math.max(0.46, 0.54 - bf * 0.20)
+    tag  = `below bf=${bf.toFixed(2)}`
+  }
+
+  console.log(
+    `[prob] ${game} "${name}" ${statType} line=${line}` +
+    ` l5=${l5?.toFixed(2) ?? 'null'} szn=${szn?.toFixed(2) ?? 'null'} ${tag} → ${prob.toFixed(3)}`,
+  )
+  return Math.min(0.78, Math.max(0.46, prob))
+}
+
 // ── PandaScore shared helper ──────────────────────────────────────────────────
 const PS_FIELDS = {
   Kills:     ['kills'],
@@ -330,18 +392,20 @@ async function getValStats(name, statType) {
 export default async function handler(req, res) {
   runDiagnostic() // no await — fires in background, doesn't block response
 
-  const { name, game, statType } = req.query || {}
+  const { name, game, statType, line: lineStr } = req.query || {}
+  const line = parseFloat(lineStr) || 0
   if (!name || !game) return res.status(400).json({ error: 'name and game required' })
 
   if (name.includes('+') || name.includes('&')) {
-    return res.json({ seasonAvg: null, last5Avg: null, source: null })
+    return res.json({ seasonAvg: null, last5Avg: null, source: null, probability: 0.54 })
   }
 
   const cacheKey = `${game.toUpperCase()}:${name}:${statType}`
   const cached = getCached(cacheKey)
   if (cached !== undefined) {
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60')
-    return res.json(cached)
+    const probability = calcProb(name, game, statType, line, cached.seasonAvg, cached.last5Avg)
+    return res.json({ ...cached, probability })
   }
 
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60')
@@ -361,11 +425,13 @@ export default async function handler(req, res) {
       `${out.source || 'miss'} l5=${out.last5Avg?.toFixed(2) ?? '-'} szn=${out.seasonAvg?.toFixed(2) ?? '-'}`,
     )
     setCached(cacheKey, out)
-    return res.json(out)
+    const probability = calcProb(name, game, statType, line, out.seasonAvg, out.last5Avg)
+    return res.json({ ...out, probability })
   } catch (e) {
     console.error(`[esports-stats] error ${game} "${name}":`, e.message)
     const out = { seasonAvg: null, last5Avg: null, source: null }
     setCached(cacheKey, out)
-    return res.json(out)
+    const probability = calcProb(name, game, statType, line, null, null)
+    return res.json({ ...out, probability })
   }
 }

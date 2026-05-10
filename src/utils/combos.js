@@ -22,6 +22,17 @@ function isValidSlip(picks) {
   return true
 }
 
+// 15% joint-probability penalty per same-team pair in a combo.
+function correlationFactor(picks) {
+  let pairs = 0
+  for (let i = 0; i < picks.length; i++) {
+    for (let j = i + 1; j < picks.length; j++) {
+      if (picks[i].team && picks[j].team && picks[i].team === picks[j].team) pairs++
+    }
+  }
+  return Math.pow(0.85, pairs)
+}
+
 // Caller must pre-sort projections in desired priority order.
 // Pool is the top-N from that ordered list.
 export function bestCombos(projections, legCount, limit = 5) {
@@ -33,8 +44,8 @@ export function bestCombos(projections, legCount, limit = 5) {
     .filter(isValidSlip)
     .map(picks => {
       const goblinCount = picks.filter(p => p.oddsType === 'goblin').length
-      const jointProb = picks.reduce((acc, p) => acc * p.probability, 1)
-      const perLegAvg = Math.pow(jointProb, 1 / legCount)
+      const jointProb   = picks.reduce((acc, p) => acc * p.probability, 1) * correlationFactor(picks)
+      const perLegAvg   = Math.pow(jointProb, 1 / legCount)
       const ev = calcEV(perLegAvg, legCount, goblinCount)
       return { picks, ev, jointProb, goblinCount }
     })
