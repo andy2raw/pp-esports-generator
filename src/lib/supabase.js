@@ -17,6 +17,9 @@
  * );
  * alter table slips enable row level security;
  * create policy "public access" on slips for all using (true) with check (true);
+ *
+ * Migration — run once to enable missed-leg tracking:
+ * alter table slips add column if not exists missed_leg text;
  */
 
 import { createClient } from '@supabase/supabase-js'

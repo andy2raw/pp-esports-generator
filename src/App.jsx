@@ -27,7 +27,7 @@ export default function App() {
   const { projections, loading, error, lastRefresh, countdown, refresh } = usePrizePicks()
   const { getStatLine, getProbBoost, psLoading } = usePandaScore(projections)
   const {
-    trackedSlips, addSlip, setResult, removeSlip,
+    trackedSlips, addSlip, setResult, setMissedLeg, removeSlip,
     playerHistory, playerScores, wins, losses, pnl, winRate, settled, pending,
     supabaseLoading,
   } = useSlipTracker()
@@ -254,6 +254,7 @@ export default function App() {
           <SlipTracker
             trackedSlips={trackedSlips}
             setResult={setResult}
+            setMissedLeg={setMissedLeg}
             removeSlip={removeSlip}
             playerHistory={playerHistory}
             wins={wins}

@@ -23,6 +23,7 @@ function rowToSlip(row) {
     ev:          row.ev || 0,
     jointProb:   row.joint_prob || 0,
     result:      row.result || 'Pending',
+    missedLeg:   row.missed_leg || null,
     slipType:    row.slip_type,
     league:      row.league,
     _raw:        { slip_type: row.slip_type, legs: row.legs, ev: row.ev, joint_prob: row.joint_prob },
@@ -47,7 +48,7 @@ export function useSlipTracker() {
   const [trackedSlips, setTrackedSlips] = useState([])
   const [supabaseLoading, setSupabaseLoading] = useState(true)
 
-  // Keep a ref so setResult / removeSlip can find slips without closing over state.
+  // Keep a ref so write callbacks can find slips without closing over state.
   const slipsRef = useRef(trackedSlips)
   useEffect(() => { slipsRef.current = trackedSlips }, [trackedSlips])
 
@@ -91,14 +92,36 @@ export function useSlipTracker() {
     const slip = slipsRef.current.find(s => s.id === id)
     if (!slip) return
 
-    // Optimistic update
-    setTrackedSlips(prev => prev.map(s => s.id === id ? { ...s, result } : s))
+    // Optimistic update; also clear missedLeg when changing away from Loss
+    const missedLeg = result === 'Loss' ? slip.missedLeg : null
+    setTrackedSlips(prev => prev.map(s => s.id === id ? { ...s, result, missedLeg } : s))
 
-    const { error } = await applySlipFilter(supabase.from('slips').update({ result }), slip)
+    const { error } = await applySlipFilter(
+      supabase.from('slips').update({ result, missed_leg: missedLeg }),
+      slip,
+    )
     if (error) {
       console.error('[Supabase] update error:', error.message)
-      // Rollback
-      setTrackedSlips(prev => prev.map(s => s.id === id ? { ...s, result: slip.result } : s))
+      setTrackedSlips(prev => prev.map(s => s.id === id ? { ...s, result: slip.result, missedLeg: slip.missedLeg } : s))
+    }
+  }, [])
+
+  const setMissedLeg = useCallback(async (id, playerName) => {
+    const slip = slipsRef.current.find(s => s.id === id)
+    if (!slip) return
+
+    // Optimistic update
+    setTrackedSlips(prev => prev.map(s => s.id === id ? { ...s, missedLeg: playerName } : s))
+
+    const { error } = await applySlipFilter(
+      supabase.from('slips').update({ missed_leg: playerName }),
+      slip,
+    )
+    if (error) {
+      // missed_leg column may not exist yet — log clearly so the user can add it
+      console.error('[Supabase] missed_leg update error:', error.message,
+        '\nRun in Supabase SQL editor: ALTER TABLE slips ADD COLUMN missed_leg text;')
+      // Keep the optimistic state so the learning system still benefits in-session
     }
   }, [])
 
@@ -112,7 +135,6 @@ export function useSlipTracker() {
     const { error } = await applySlipFilter(supabase.from('slips').delete(), slip)
     if (error) {
       console.error('[Supabase] delete error:', error.message)
-      // Rollback
       setTrackedSlips(prev => [slip, ...prev])
     }
   }, [])
@@ -126,8 +148,18 @@ export function useSlipTracker() {
       for (const pick of slip.picks) {
         const key = pick.playerName
         if (!h[key]) h[key] = { name: key, hits: 0, misses: 0 }
-        if (slip.result === 'Win') h[key].hits++
-        else h[key].misses++
+        if (slip.result === 'Win') {
+          h[key].hits++
+        } else {
+          // Loss: if we know which leg missed, only that player gets a miss;
+          // the others came through and should get credit for hitting.
+          if (slip.missedLeg) {
+            if (pick.playerName === slip.missedLeg) h[key].misses++
+            else h[key].hits++
+          } else {
+            h[key].misses++
+          }
+        }
       }
     }
     return h
@@ -164,6 +196,7 @@ export function useSlipTracker() {
     trackedSlips,
     addSlip,
     setResult,
+    setMissedLeg,
     removeSlip,
     playerHistory,
     playerScores,

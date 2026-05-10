@@ -23,7 +23,7 @@ function borderColor(result) {
 }
 
 export default function SlipTracker({
-  trackedSlips, setResult, removeSlip,
+  trackedSlips, setResult, setMissedLeg, removeSlip,
   playerHistory, wins, losses, pnl, winRate, settled, pending,
   supabaseLoading,
 }) {
@@ -95,6 +95,7 @@ export default function SlipTracker({
               border: `1px solid ${borderColor(slip.result)}`,
               borderRadius: 8, padding: '11px 14px',
             }}>
+              {/* Header row: timestamp + result buttons */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7, flexWrap: 'wrap', gap: 6 }}>
                 <span style={{ fontSize: 10, color: '#555' }}>
                   {fmtDate(slip.timestamp)} · {slip.slipType || `${slip.legCount}-leg`}
@@ -121,18 +122,64 @@ export default function SlipTracker({
                   }}>✕</button>
                 </div>
               </div>
+
+              {/* Player legs */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {slip.picks.map((p, i) => (
-                  <div key={i} style={{ fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span style={{ color: 'var(--cream)', fontWeight: 600 }}>{p.playerName}</span>
-                    <span style={{ color: '#666' }}>{p.statType} O{p.line}</span>
-                    <span style={{ color: probColor(p.probability) }}>{fmtPct(p.probability)}</span>
-                    {p.oddsType === 'goblin' && (
-                      <span style={{ fontSize: 9, color: '#f59e0b' }}>GOBLIN</span>
-                    )}
-                  </div>
-                ))}
+                {slip.picks.map((p, i) => {
+                  const isMissed = slip.result === 'Loss' && slip.missedLeg === p.playerName
+                  return (
+                    <div key={i} style={{ fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span style={{ color: isMissed ? '#ef4444' : 'var(--cream)', fontWeight: 600 }}>
+                        {p.playerName}
+                      </span>
+                      <span style={{ color: '#666' }}>{p.statType} O{p.line}</span>
+                      <span style={{ color: probColor(p.probability) }}>{fmtPct(p.probability)}</span>
+                      {p.oddsType === 'goblin' && (
+                        <span style={{ fontSize: 9, color: '#f59e0b' }}>GOBLIN</span>
+                      )}
+                      {isMissed && (
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, color: '#ef4444',
+                          background: '#ef444422', border: '1px solid #ef444455',
+                          borderRadius: 3, padding: '1px 4px', letterSpacing: 0.3,
+                        }}>
+                          MISSED
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
+
+              {/* Missed leg selector — shown for Loss slips where the culprit isn't pinned yet */}
+              {slip.result === 'Loss' && !slip.missedLeg && slip.picks.length > 0 && (
+                <div style={{
+                  marginTop: 10, paddingTop: 8,
+                  borderTop: '1px solid #2a2a2a',
+                }}>
+                  <div style={{ fontSize: 9, color: '#666', letterSpacing: 0.5, marginBottom: 6 }}>
+                    WHICH LEG MISSED?
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {slip.picks.map((p, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setMissedLeg(slip.id, p.playerName)}
+                        style={{
+                          fontSize: 10, padding: '4px 9px', borderRadius: 4, cursor: 'pointer',
+                          fontWeight: 600, background: '#2a1a1a',
+                          border: '1px solid #ef444455', color: '#ef4444',
+                          transition: 'background 0.1s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#ef444422' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#2a1a1a' }}
+                      >
+                        {p.playerName}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
