@@ -3,7 +3,7 @@ import { usePrizePicks } from './hooks/usePrizePicks.js'
 import { usePandaScore } from './hooks/usePandaScore.js'
 import { useSlipTracker } from './hooks/useSlipTracker.js'
 import { bestCombos } from './utils/combos.js'
-import { fmtPct, fmtEV, probColor, calcEV, calcConfidence } from './utils/ev.js'
+import { fmtPct, fmtEV, probColor, calcEV, calcConfidence, isLineGoblin } from './utils/ev.js'
 import SlipCard from './components/SlipCard.jsx'
 import StatsBadge from './components/StatsBadge.jsx'
 import SlipTracker from './components/SlipTracker.jsx'
@@ -36,7 +36,9 @@ export default function App() {
   // Falls back to p.probability (estimateProb from PrizePicks metadata) while loading.
   const adjustedProjections = useMemo(
     () => projections.map(p => {
-      const prob = getCalcProb(p.playerName, p.league, p.statType) ?? p.probability
+      const serverProb = getCalcProb(p.playerName, p.league, p.statType)
+      const prob = serverProb ?? p.probability
+      console.log(`[winProb] ${p.league} ${p.playerName} | ${p.statType} | line=${p.line} | server=${serverProb?.toFixed(3) ?? 'null'} | base=${p.probability?.toFixed(3)} | used=${prob?.toFixed(3)}`)
       return { ...p, probability: prob }
     }),
     [projections, getCalcProb],
@@ -281,7 +283,16 @@ export default function App() {
                         <td style={{ padding: '9px 10px', color: '#888', whiteSpace: 'nowrap' }}>{p.team || '—'}</td>
                         <td style={{ padding: '9px 10px', color: '#666', fontSize: 10 }}>{p.league}</td>
                         <td style={{ padding: '9px 10px', color: '#aaa', whiteSpace: 'nowrap' }}>{p.statType}</td>
-                        <td style={{ padding: '9px 10px', fontVariantNumeric: 'tabular-nums' }}>{p.line}</td>
+                        <td style={{ padding: '9px 10px', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                          {p.line}
+                          {isLineGoblin(p.line, p.league, p.statType) && (
+                            <span style={{
+                              marginLeft: 5, fontSize: 9, background: '#16a34a22', color: '#16a34a',
+                              border: '1px solid #16a34a55', borderRadius: 3, padding: '1px 4px',
+                              fontWeight: 700,
+                            }}>GOBLIN</span>
+                          )}
+                        </td>
                         <td style={{ padding: '9px 10px' }}>
                           {sl ? (
                             <StatsBadge seasonAvg={sl.seasonAvg} last5Avg={sl.last5Avg} line={p.line} />

@@ -113,6 +113,17 @@ export function calcConfidence(combo, getStatLine, playerHistory) {
   return score === 5 ? (trendValues.length > 0 ? 6 : 4) : score
 }
 
+// Returns true when a Kills line is set so low it's statistically easy to go over.
+// These are prime "goblin line" targets regardless of PrizePicks odds type.
+export function isLineGoblin(line, game, statType) {
+  if (!(statType || '').toLowerCase().includes('kill')) return false
+  const g = (game || '').toUpperCase()
+  const isMultiMap = /1-2|1-3|combo/i.test(statType)
+  const single = { CSGO: 14, CS2: 14, VAL: 15, LOL: 5, DOTA2: 8 }[g]
+  if (!single) return false
+  return line < (isMultiMap ? single * 1.8 : single)
+}
+
 export function estimateProb(attrs) {
   let p = 0.54
   if (attrs.is_promo) p += 0.04

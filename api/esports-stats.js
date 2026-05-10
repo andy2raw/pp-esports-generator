@@ -91,40 +91,19 @@ async function psGet(path) {
 function avg(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null }
 
 // ── Probability calculation ───────────────────────────────────────────────────
-function lineHeuristic(line, game, statType) {
-  const st = (statType || '').toLowerCase()
-  const g = (game || '').toUpperCase()
-  let prob = 0.54
-  if (st.includes('kill')) {
-    const typical = { LOL: 6, CSGO: 16, CS2: 16, VAL: 18, DOTA2: 10 }[g] ?? 12
-    const r = line / typical
-    if (r < 0.75)      prob = 0.67
-    else if (r < 0.90) prob = 0.62
-    else if (r < 1.05) prob = 0.56
-    else if (r < 1.20) prob = 0.51
-    else               prob = 0.48
-  } else if (st.includes('death')) {
-    prob = line < 8 ? 0.64 : line < 12 ? 0.58 : line < 16 ? 0.52 : 0.48
-  } else if (st.includes('assist')) {
-    prob = line < 5 ? 0.65 : line < 8 ? 0.60 : line < 12 ? 0.55 : 0.50
-  } else if (st.includes('headshot')) {
-    prob = line < 35 ? 0.64 : line < 46 ? 0.57 : 0.50
-  }
-  return Math.min(0.70, Math.max(0.46, prob))
-}
-
+// Returns null when no stats data is available so the client falls back to
+// its own estimateProb (PrizePicks odds-type metadata). Never invents a number.
 function calcProb(name, game, statType, line, seasonAvg, last5Avg) {
-  if (!line || line <= 0) return 0.54
+  if (!line || line <= 0) return null
   const l5 = last5Avg
   const szn = seasonAvg
+  if (szn == null && l5 == null) return null   // no real stats → skip, client decides
+
   const l5Above  = l5 != null && l5 > line
   const sznAbove = szn != null && szn > line
   let prob, tag
 
-  if (szn == null && l5 == null) {
-    prob = lineHeuristic(line, game, statType)
-    tag  = 'heuristic'
-  } else if (l5Above && sznAbove) {
+  if (l5Above && sznAbove) {
     const l5Ex  = l5 / line - 1
     const sznEx = szn / line - 1
     const avgEx = (l5Ex + sznEx) / 2
@@ -397,7 +376,7 @@ export default async function handler(req, res) {
   if (!name || !game) return res.status(400).json({ error: 'name and game required' })
 
   if (name.includes('+') || name.includes('&')) {
-    return res.json({ seasonAvg: null, last5Avg: null, source: null, probability: 0.54 })
+    return res.json({ seasonAvg: null, last5Avg: null, source: null })
   }
 
   const cacheKey = `${game.toUpperCase()}:${name}:${statType}`
@@ -405,7 +384,7 @@ export default async function handler(req, res) {
   if (cached !== undefined) {
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60')
     const probability = calcProb(name, game, statType, line, cached.seasonAvg, cached.last5Avg)
-    return res.json({ ...cached, probability })
+    return res.json(probability != null ? { ...cached, probability } : cached)
   }
 
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60')
@@ -426,12 +405,11 @@ export default async function handler(req, res) {
     )
     setCached(cacheKey, out)
     const probability = calcProb(name, game, statType, line, out.seasonAvg, out.last5Avg)
-    return res.json({ ...out, probability })
+    return res.json(probability != null ? { ...out, probability } : out)
   } catch (e) {
     console.error(`[esports-stats] error ${game} "${name}":`, e.message)
     const out = { seasonAvg: null, last5Avg: null, source: null }
     setCached(cacheKey, out)
-    const probability = calcProb(name, game, statType, line, null, null)
-    return res.json({ ...out, probability })
+    return res.json(out)
   }
 }
