@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { usePrizePicks } from './hooks/usePrizePicks.js'
 import { usePandaScore } from './hooks/usePandaScore.js'
 import { useSlipTracker } from './hooks/useSlipTracker.js'
@@ -82,6 +82,30 @@ export default function App() {
 
   const hasSlips = combos2.length > 0 || combos4.length > 0 || lotterySlip
 
+  // ── Auto-save all generated slips on first successful load ─────────────────
+  // Fires once per session after both Supabase and PrizePicks data are ready.
+  // Skips any slip already saved (matched by the stable composite key).
+  const autoSavedRef = useRef(false)
+  useEffect(() => {
+    if (autoSavedRef.current) return
+    if (supabaseLoading) return
+    if (!combos2.length && !combos4.length && !lotterySlip) return
+
+    autoSavedRef.current = true
+
+    const existingIds = new Set(trackedSlips.map(s => s.id))
+
+    function maybeAdd(combo, slipType, leagueArg) {
+      // Must match rowKey() format in useSlipTracker.js
+      const key = `${slipType}|${combo.picks.length}|${Number(combo.ev).toFixed(8)}|${Number(combo.jointProb).toFixed(8)}`
+      if (!existingIds.has(key)) addSlip(combo, slipType, leagueArg)
+    }
+
+    combos2.forEach(c => maybeAdd(c, '2-leg', league))
+    combos4.forEach(c => maybeAdd(c, '4-leg', league))
+    if (lotterySlip) maybeAdd(lotterySlip, 'lottery-6', 'ALL')
+  }, [supabaseLoading, combos2, combos4, lotterySlip, trackedSlips, addSlip, league])
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--cream)', fontFamily: 'system-ui, sans-serif' }}>
       <ErrorBoundary label="Quote failed">
@@ -154,7 +178,7 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>2-LEG SLIPS</div>
                   {combos2.map((c, i) => (
-                    <SlipCard key={i} combo={c} rank={i + 1} onTrack={(combo) => addSlip(combo, '2-leg', league)} />
+                    <SlipCard key={i} combo={c} rank={i + 1} />
                   ))}
                 </div>
               )}
@@ -162,14 +186,14 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>4-LEG SLIPS</div>
                   {combos4.map((c, i) => (
-                    <SlipCard key={i} combo={c} rank={i + 1} onTrack={(combo) => addSlip(combo, '4-leg', league)} />
+                    <SlipCard key={i} combo={c} rank={i + 1} />
                   ))}
                 </div>
               )}
               {lotterySlip && (
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', letterSpacing: 1, marginBottom: 8 }}>6-LEG LOTTERY</div>
-                  <SlipCard combo={lotterySlip} rank={1} variant="lottery" onTrack={(combo) => addSlip(combo, 'lottery-6', 'ALL')} />
+                  <SlipCard combo={lotterySlip} rank={1} variant="lottery" />
                 </div>
               )}
             </div>

@@ -1,19 +1,9 @@
-import { useState } from 'react'
 import { fmtPct, fmtEV, probColor } from '../utils/ev.js'
 
-export default function SlipCard({ combo, rank, onTrack, variant }) {
+export default function SlipCard({ combo, rank, variant, confidence }) {
   const { picks, ev, jointProb, goblinCount } = combo
   const legCount = picks.length
   const isLottery = variant === 'lottery'
-  const [tracked, setTracked] = useState(false)
-
-  function handleTrack() {
-    if (onTrack && !tracked) {
-      onTrack(combo)
-      setTracked(true)
-      setTimeout(() => setTracked(false), 2000)
-    }
-  }
 
   return (
     <div style={{
@@ -28,12 +18,28 @@ export default function SlipCard({ combo, rank, onTrack, variant }) {
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: isLottery ? '#c9a84c' : '#888' }}>
           {isLottery ? 'LOTTERY TICKET' : `#${rank} — ${legCount}-LEG SLIP`}
         </span>
-        <span style={{
-          fontSize: 13, fontWeight: 700,
-          color: ev >= 0 ? 'var(--green)' : isLottery ? '#c9a84c' : 'var(--red)',
-        }}>
-          EV {fmtEV(ev)}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {confidence != null && (
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              background: confidence >= 7 ? '#22c55e22' : confidence >= 5 ? '#eab30822' : '#ef444422',
+              border: `1px solid ${confidence >= 7 ? '#22c55e55' : confidence >= 5 ? '#eab30855' : '#ef444455'}`,
+              borderRadius: 6, padding: '3px 8px', minWidth: 36,
+            }}>
+              <span style={{
+                fontSize: 18, fontWeight: 800, lineHeight: 1,
+                color: confidence >= 7 ? 'var(--green)' : confidence >= 5 ? 'var(--yellow)' : 'var(--red)',
+              }}>{confidence}</span>
+              <span style={{ fontSize: 7, color: '#555', letterSpacing: 0.3 }}>CONF</span>
+            </div>
+          )}
+          <span style={{
+            fontSize: 13, fontWeight: 700,
+            color: ev >= 0 ? 'var(--green)' : isLottery ? '#c9a84c' : 'var(--red)',
+          }}>
+            EV {fmtEV(ev)}
+          </span>
+        </div>
       </div>
 
       <div style={{ fontSize: 11, color: '#777', marginBottom: 8 }}>
@@ -45,7 +51,7 @@ export default function SlipCard({ combo, rank, onTrack, variant }) {
         )}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: onTrack ? 10 : 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {picks.map(p => (
           <div key={p.id} style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -71,22 +77,6 @@ export default function SlipCard({ combo, rank, onTrack, variant }) {
           </div>
         ))}
       </div>
-
-      {onTrack && (
-        <button
-          onClick={handleTrack}
-          style={{
-            width: '100%', padding: '6px 0', borderRadius: 5, fontSize: 11, fontWeight: 600,
-            cursor: tracked ? 'default' : 'pointer',
-            background: tracked ? '#1a2e1a' : 'transparent',
-            border: `1px solid ${tracked ? '#22c55e55' : '#333'}`,
-            color: tracked ? 'var(--green)' : '#555',
-            transition: 'all 0.2s',
-          }}
-        >
-          {tracked ? '✓ Tracked' : 'Track this slip'}
-        </button>
-      )}
     </div>
   )
 }
