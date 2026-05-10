@@ -1,12 +1,30 @@
 // GET /api/esports-stats?name=PlayerName&game=LOL&statType=Kills
 // Returns { seasonAvg, last5Avg, source } or { seasonAvg: null, last5Avg: null, source: null }
 
-// PandaScore key — set PANDASCORE_KEY or PANDASCORE_API_KEY in Vercel env vars.
-// Falls back to the key bundled in the repo if neither is present.
-const PANDASCORE_KEY =
-  process.env.PANDASCORE_KEY ||
-  process.env.PANDASCORE_API_KEY ||
-  'QkohrjP_82QcwWoUPQiWrpNPszApddHt-5ZyJlBSEyeLz7-Vpq4'
+// PandaScore key — must be set as PANDASCORE_KEY in Vercel environment variables.
+const PANDASCORE_KEY = process.env.PANDASCORE_KEY || ''
+
+// Fire once per cold start: log the key prefix and a live test call for Curse.
+let _diagnosticDone = false
+async function runDiagnostic() {
+  if (_diagnosticDone) return
+  _diagnosticDone = true
+  const keyPreview = PANDASCORE_KEY
+    ? `"${PANDASCORE_KEY.slice(0, 12)}…" (len=${PANDASCORE_KEY.length})`
+    : 'NOT SET'
+  console.log(`[PS diagnostic] PANDASCORE_KEY = ${keyPreview}`)
+  if (!PANDASCORE_KEY) return
+  try {
+    const res = await fetch(
+      'https://api.pandascore.co/csgo/players?search[name]=Curse&per_page=5',
+      { headers: { Authorization: `Bearer ${PANDASCORE_KEY}` } },
+    )
+    const body = await res.text()
+    console.log(`[PS diagnostic] Curse test → HTTP ${res.status}: ${body.slice(0, 300)}`)
+  } catch (e) {
+    console.log(`[PS diagnostic] Curse test → fetch error: ${e.message}`)
+  }
+}
 
 const cache = new Map()
 const CACHE_TTL = 5 * 60_000
@@ -258,6 +276,8 @@ async function getValStats(name, statType) {
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
+  runDiagnostic() // no await — fires in background, doesn't block response
+
   const { name, game, statType } = req.query || {}
   if (!name || !game) return res.status(400).json({ error: 'name and game required' })
 
