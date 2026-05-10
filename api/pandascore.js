@@ -1,4 +1,4 @@
-const PANDASCORE_KEY = process.env.PANDASCORE_KEY || 'QkohrjP_82QcwWoUPQiWrpNPszApddHt-5ZyJlBSEyeLz7-Vpq4'
+const PANDASCORE_KEY = process.env.PANDASCORE_KEY || ''
 const BASE = 'https://api.pandascore.co'
 
 const cache = new Map()
