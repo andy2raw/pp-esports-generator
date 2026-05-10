@@ -1,6 +1,6 @@
 import { fmtPct, fmtEV, probColor } from '../utils/ev.js'
 
-export default function SlipCard({ combo, rank, variant, confidence }) {
+export default function SlipCard({ combo, rank, variant, confidence, onTrack }) {
   const { picks, ev, jointProb, goblinCount } = combo
   const legCount = picks.length
   const isLottery = variant === 'lottery'
@@ -50,6 +50,21 @@ export default function SlipCard({ combo, rank, variant, confidence }) {
           </span>
         )}
       </div>
+
+      {onTrack && (
+        <button
+          onClick={onTrack}
+          style={{
+            width: '100%', marginBottom: 10, padding: '7px 0',
+            background: '#1a2a1a', border: '1px solid #22c55e55',
+            color: 'var(--green)', borderRadius: 6,
+            fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+            cursor: 'pointer',
+          }}
+        >
+          + Track This Slip
+        </button>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {picks.map(p => (

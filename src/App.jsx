@@ -77,6 +77,7 @@ export default function App() {
   )
 
   const combos2Raw     = useMemo(() => bestCombos(slipPool, 2, 3),       [slipPool])
+  const combos3Raw     = useMemo(() => bestCombos(slipPool, 3, 3),       [slipPool])
   const combos4Raw     = useMemo(() => bestCombos(slipPool, 4, 3),       [slipPool])
   const lotterySlipRaw = useMemo(() => bestCombos(lotteryPool, 6, 1)[0] ?? null, [lotteryPool])
 
@@ -85,6 +86,10 @@ export default function App() {
   const combos2 = useMemo(
     () => combos2Raw.map(c => ({ ...c, confidence: calcConfidence(c, getStatLine, playerHistory) })),
     [combos2Raw, getStatLine, playerHistory],
+  )
+  const combos3 = useMemo(
+    () => combos3Raw.map(c => ({ ...c, confidence: calcConfidence(c, getStatLine, playerHistory) })),
+    [combos3Raw, getStatLine, playerHistory],
   )
   const combos4 = useMemo(
     () => combos4Raw.map(c => ({ ...c, confidence: calcConfidence(c, getStatLine, playerHistory) })),
@@ -97,7 +102,7 @@ export default function App() {
     [lotterySlipRaw, getStatLine, playerHistory],
   )
 
-  const hasSlips = combos2.length > 0 || combos4.length > 0 || lotterySlip
+  const hasSlips = combos2.length > 0 || combos3.length > 0 || combos4.length > 0 || lotterySlip
 
   // ── Auto-save all generated slips on first successful load ─────────────────
   // Fires once per session after both Supabase and PrizePicks data are ready.
@@ -106,7 +111,7 @@ export default function App() {
   useEffect(() => {
     if (autoSavedRef.current) return
     if (supabaseLoading) return
-    if (!combos2.length && !combos4.length && !lotterySlip) return
+    if (!combos2.length && !combos3.length && !combos4.length && !lotterySlip) return
 
     autoSavedRef.current = true
 
@@ -119,9 +124,10 @@ export default function App() {
     }
 
     combos2.forEach(c => maybeAdd(c, '2-leg', league))
+    combos3.forEach(c => maybeAdd(c, '3-leg', league))
     combos4.forEach(c => maybeAdd(c, '4-leg', league))
     if (lotterySlip) maybeAdd(lotterySlip, 'lottery-6', 'ALL')
-  }, [supabaseLoading, combos2, combos4, lotterySlip, trackedSlips, addSlip, league])
+  }, [supabaseLoading, combos2, combos3, combos4, lotterySlip, trackedSlips, addSlip, league])
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--cream)', fontFamily: 'system-ui, sans-serif' }}>
@@ -195,7 +201,17 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>2-LEG SLIPS</div>
                   {combos2.map((c, i) => (
-                    <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence} />
+                    <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
+                      onTrack={() => addSlip(c, '2-leg', league)} />
+                  ))}
+                </div>
+              )}
+              {combos3.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>3-LEG SLIPS</div>
+                  {combos3.map((c, i) => (
+                    <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
+                      onTrack={() => addSlip(c, '3-leg', league)} />
                   ))}
                 </div>
               )}
@@ -203,14 +219,16 @@ export default function App() {
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>4-LEG SLIPS</div>
                   {combos4.map((c, i) => (
-                    <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence} />
+                    <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
+                      onTrack={() => addSlip(c, '4-leg', league)} />
                   ))}
                 </div>
               )}
               {lotterySlip && (
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', letterSpacing: 1, marginBottom: 8 }}>6-LEG LOTTERY</div>
-                  <SlipCard combo={lotterySlip} rank={1} variant="lottery" confidence={lotterySlip.confidence} />
+                  <SlipCard combo={lotterySlip} rank={1} variant="lottery" confidence={lotterySlip.confidence}
+                    onTrack={() => addSlip(lotterySlip, 'lottery-6', 'ALL')} />
                 </div>
               )}
             </div>
