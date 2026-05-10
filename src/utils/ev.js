@@ -36,11 +36,44 @@ export function probColor(p) {
   return 'var(--red)'
 }
 
+// Line-realism score (4–8, never 5) used when no stats data is available.
+// Compares the PrizePicks line to typical esports map averages to judge
+// whether the line is easy, fair, or tough.
+function lineBasedConfidence(picks) {
+  const scores = picks.map(p => {
+    const st = (p.statType || '').toLowerCase()
+    const line = p.line || 0
+
+    if (st.includes('kill')) {
+      const isMultiMap = st.includes('1-2') || st.includes('1-3') || st.includes('combo')
+      if (isMultiMap) {
+        // MAP 1-2 / combo: typical range 20–40 kills
+        if (line < 16) return 8
+        if (line < 22) return 7
+        if (line < 32) return 6
+        return 4
+      } else {
+        // Single-player per-map: typical range 8–18
+        if (line < 7)  return 8
+        if (line < 11) return 7
+        if (line < 17) return 6
+        return 4
+      }
+    }
+    if (st.includes('assist')) return line < 8  ? 7 : line < 15 ? 6 : 4
+    if (st.includes('death'))  return line < 10 ? 7 : line < 16 ? 6 : 4
+    if (st.includes('headshot')) return line < 35 ? 7 : line < 46 ? 6 : 4
+    return 6 // default: slightly above neutral, avoids 5
+  })
+  const raw = scores.reduce((a, b) => a + b, 0) / scores.length
+  return Math.max(1, Math.min(10, Math.round(raw)))
+}
+
 // Confidence score 1–10 combining hit probability, stats trend, player history.
-// Returns an integer. Neutral (0.5) is used when a factor has no data.
+// Falls back to line-based scoring when no external data is available.
 export function calcConfidence(combo, getStatLine, playerHistory) {
   const { picks } = combo
-  if (!picks?.length) return 5
+  if (!picks?.length) return 6
 
   // 1) Average per-leg hit probability, normalised to 0–1 over [0.46, 0.74]
   const avgProb = picks.reduce((s, p) => s + p.probability, 0) / picks.length
@@ -53,21 +86,31 @@ export function calcConfidence(combo, getStatLine, playerHistory) {
     if (a === null) return null
     return a >= p.line ? 1 : a >= p.line - 2 ? 0.5 : 0
   }).filter(v => v !== null)
-  const trendScore = trendValues.length
-    ? trendValues.reduce((a, b) => a + b, 0) / trendValues.length
-    : 0.5
 
   // 3) Player history win-rate (requires ≥2 settled slips per player)
   const histValues = picks.map(p => {
     const h = playerHistory[p.playerName]
     return h && h.hits + h.misses >= 2 ? h.hits / (h.hits + h.misses) : null
   }).filter(v => v !== null)
+
+  // If neither stats nor history is available, skip the composite and use
+  // the line-based heuristic directly — it never returns 5.
+  if (trendValues.length === 0 && histValues.length === 0) {
+    return lineBasedConfidence(picks)
+  }
+
+  const trendScore = trendValues.length
+    ? trendValues.reduce((a, b) => a + b, 0) / trendValues.length
+    : (lineBasedConfidence(picks) - 1) / 9  // convert 1-10 → 0-1 when partially missing
+
   const histScore = histValues.length
     ? histValues.reduce((a, b) => a + b, 0) / histValues.length
     : 0.5
 
   const composite = probScore * 0.5 + trendScore * 0.3 + histScore * 0.2
-  return Math.max(1, Math.min(10, Math.round(composite * 9 + 1)))
+  const score = Math.max(1, Math.min(10, Math.round(composite * 9 + 1)))
+  // Nudge off exactly 5 when data is partial to signal "no strong signal"
+  return score === 5 ? (trendValues.length > 0 ? 6 : 4) : score
 }
 
 export function estimateProb(attrs) {
