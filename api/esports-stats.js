@@ -5,7 +5,7 @@
 // PandaScore key — must be set as PANDASCORE_KEY in Vercel environment variables.
 const PANDASCORE_KEY = process.env.PANDASCORE_KEY || ''
 
-// Fire once per cold start: log the key prefix and a live test call for Curse.
+// Fire once per cold start: log the key prefix + one live search per game type.
 let _diagnosticDone = false
 async function runDiagnostic() {
   if (_diagnosticDone) return
@@ -15,15 +15,23 @@ async function runDiagnostic() {
     : 'NOT SET'
   console.log(`[PS diagnostic] PANDASCORE_KEY = ${keyPreview}`)
   if (!PANDASCORE_KEY) return
-  try {
-    const res = await fetch(
-      'https://api.pandascore.co/csgo/players?search[name]=Curse&per_page=5',
-      { headers: { Authorization: `Bearer ${PANDASCORE_KEY}` } },
-    )
-    const body = await res.text()
-    console.log(`[PS diagnostic] Curse test → HTTP ${res.status}: ${body.slice(0, 300)}`)
-  } catch (e) {
-    console.log(`[PS diagnostic] Curse test → fetch error: ${e.message}`)
+
+  const tests = [
+    { slug: 'csgo',     name: 'Curse' },
+    { slug: 'valorant', name: 'kiNgg' },
+    { slug: 'lol',      name: 'Ruler' },
+  ]
+  for (const { slug, name } of tests) {
+    try {
+      const res = await fetch(
+        `https://api.pandascore.co/${slug}/players?search[name]=${encodeURIComponent(name)}&per_page=3`,
+        { headers: { Authorization: `Bearer ${PANDASCORE_KEY}` } },
+      )
+      const body = await res.text()
+      console.log(`[PS diagnostic] ${slug} "${name}" → HTTP ${res.status}: ${body.slice(0, 200)}`)
+    } catch (e) {
+      console.log(`[PS diagnostic] ${slug} "${name}" → fetch error: ${e.message}`)
+    }
   }
 }
 
@@ -53,11 +61,31 @@ async function safeFetch(url, { timeoutMs = 6000, headers = {} } = {}) {
   }
 }
 
-function psGet(path) {
-  return safeFetch(`https://api.pandascore.co${path}`, {
-    headers: { Authorization: `Bearer ${PANDASCORE_KEY}` },
-    timeoutMs: 7000,
-  })
+async function psGet(path) {
+  const url = `https://api.pandascore.co${path}`
+  try {
+    const controller = new AbortController()
+    const t = setTimeout(() => controller.abort(), 7000)
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${PANDASCORE_KEY}` },
+    })
+    clearTimeout(t)
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.log(`[psGet] ${res.status} ${path.slice(0, 80)} body="${body.slice(0, 120)}"`)
+      return null
+    }
+    const data = await res.json().catch(() => null)
+    const summary = Array.isArray(data)
+      ? `count=${data.length} first=${JSON.stringify(data[0]?.name ?? data[0]?.id ?? null)}`
+      : `keys=${Object.keys(data || {}).slice(0, 5).join(',')}`
+    console.log(`[psGet] 200 ${path.slice(0, 80)} ${summary}`)
+    return data
+  } catch (e) {
+    console.log(`[psGet] err ${path.slice(0, 80)}: ${e.message}`)
+    return null
+  }
 }
 
 function avg(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null }
@@ -137,7 +165,7 @@ async function getPandaScoreStats(gameSlug, name, statType) {
   return { seasonAvg, last5Avg, source: 'pandascore' }
 }
 
-// ── LOL — Leaguepedia (lol.fandom.com) Cargo API — UNCHANGED ─────────────────
+// ── LOL — PandaScore first (slug: lol), Leaguepedia fallback ─────────────────
 const LOL_FIELD_MAP = {
   'Kills':       'Kills',
   'Deaths':      'Deaths',
@@ -147,6 +175,11 @@ const LOL_FIELD_MAP = {
 }
 
 async function getLolStats(name, statType) {
+  // 1) Try PandaScore /lol/players
+  const ps = await getPandaScoreStats('lol', name, statType)
+  if (ps) return ps
+
+  // 2) Fallback: Leaguepedia Cargo API
   const field = LOL_FIELD_MAP[statType]
   if (!field) return null
 
