@@ -173,6 +173,13 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack }) 
                     border: '1px solid #1d4ed855', borderRadius: 3, padding: '1px 4px', fontWeight: 700,
                   }}>LOCK</span>
                 )}
+                {p.sharp && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 700,
+                    background: '#eab30814', color: '#eab308',
+                    border: '1px solid #eab30840', borderRadius: 3, padding: '1px 4px',
+                  }}>SHARP</span>
+                )}
                 {p.oddsType === 'demon' && (
                   <span style={{
                     fontSize: 9, background: '#6b21a822', color: '#a78bfa',

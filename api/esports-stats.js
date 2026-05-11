@@ -123,6 +123,33 @@ function lineHeuristic(line, game, statType) {
   return 0.54
 }
 
+// Apply post-calcProb adjustments: LOL role multiplier + sharp line detection.
+// Returns { probability, sharp }.
+function finalizeProb(name, game, statType, line, data) {
+  let probability = calcProb(name, game, statType, line, data.seasonAvg, data.last5Avg)
+
+  // LOL kills: Support/Jungle players get 0.75× multiplier (fewer kills by design).
+  if ((game || '').toUpperCase() === 'LOL' && (statType || '').toLowerCase().includes('kill')) {
+    const role = (data.role || '').toLowerCase()
+    if (role && (role.includes('sup') || role.includes('jng') ||
+                 role.includes('support') || role.includes('jungle'))) {
+      const before = probability
+      probability = Math.max(0.44, probability * 0.75)
+      console.log(`[lol-role] "${name}" role=${data.role} ${before.toFixed(3)} ×0.75 → ${probability.toFixed(3)}`)
+    }
+  }
+
+  // Sharp line: when L5 is within 0.5 of the line it's a coin-flip — set to 0.50.
+  let sharp = false
+  if (data.last5Avg != null && line > 0 && Math.abs(data.last5Avg - line) <= 0.5) {
+    probability = 0.50
+    sharp = true
+    console.log(`[sharp] "${name}" line=${line} l5=${data.last5Avg?.toFixed(2)} → SHARP 0.50`)
+  }
+
+  return { probability, sharp }
+}
+
 function calcProb(name, game, statType, line, seasonAvg, last5Avg) {
   if (!line || line <= 0) return lineHeuristic(line || 0, game, statType)
   const l5 = last5Avg
@@ -284,7 +311,7 @@ async function getLolStats(name, statType) {
     const params = new URLSearchParams({
       action:   'cargoquery',
       tables:   'ScoreboardPlayers',
-      fields:   `Link,${field}`,
+      fields:   `Link,${field},Role`,
       where:    `Link="${v}"`,
       order_by: 'DateTime_UTC DESC',
       limit:    '10',
@@ -297,7 +324,9 @@ async function getLolStats(name, statType) {
     const values = rows.map(r => parseFloat(r.title?.[field])).filter(v2 => !isNaN(v2) && v2 >= 0)
     if (!values.length) continue
 
-    return { last5Avg: avg(values.slice(0, 5)), seasonAvg: avg(values), source: 'leaguepedia' }
+    const role = rows[0]?.title?.Role || null
+    console.log(`[lol] "${name}" role=${role} from leaguepedia`)
+    return { last5Avg: avg(values.slice(0, 5)), seasonAvg: avg(values), source: 'leaguepedia', role }
   }
   return null
 }
@@ -416,8 +445,8 @@ export default async function handler(req, res) {
   const cached = getCached(cacheKey)
   if (cached !== undefined) {
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60')
-    const probability = calcProb(name, game, statType, line, cached.seasonAvg, cached.last5Avg)
-    return res.json({ ...cached, probability })
+    const { probability, sharp } = finalizeProb(name, game, statType, line, cached)
+    return res.json({ ...cached, probability, sharp })
   }
 
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60')
@@ -437,13 +466,13 @@ export default async function handler(req, res) {
       `${out.source || 'miss'} l5=${out.last5Avg?.toFixed(2) ?? '-'} szn=${out.seasonAvg?.toFixed(2) ?? '-'}`,
     )
     setCached(cacheKey, out)
-    const probability = calcProb(name, game, statType, line, out.seasonAvg, out.last5Avg)
-    return res.json({ ...out, probability })
+    const { probability, sharp } = finalizeProb(name, game, statType, line, out)
+    return res.json({ ...out, probability, sharp })
   } catch (e) {
     console.error(`[esports-stats] error ${game} "${name}":`, e.message)
     const out = { seasonAvg: null, last5Avg: null, source: null }
     setCached(cacheKey, out)
     const probability = lineHeuristic(line, game, statType)
-    return res.json({ ...out, probability })
+    return res.json({ ...out, probability, sharp: false })
   }
 }

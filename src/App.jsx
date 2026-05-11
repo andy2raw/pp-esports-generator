@@ -25,7 +25,7 @@ function withOverUnder(combo, getStatLine) {
     picks: combo.picks.map(p => {
       const sl = getStatLine(p.playerName, p.league, p.statType)
       const l5 = sl?.last5Avg ?? sl?.seasonAvg
-      return { ...p, overUnder: l5 != null ? (l5 > p.line ? 'OVER' : 'UNDER') : 'OVER' }
+      return { ...p, overUnder: l5 != null ? (l5 > p.line ? 'OVER' : 'UNDER') : 'OVER', sharp: sl?.sharp ?? false }
     }),
   }
 }
@@ -259,10 +259,15 @@ export default function App() {
                       const sl = getStatLine(p.playerName, p.league, p.statType)
                       const l5 = sl?.last5Avg ?? sl?.seasonAvg
                       const overUnder = l5 != null ? (l5 > p.line ? 'OVER' : 'UNDER') : 'OVER'
+                      const isSharp = sl?.sharp ?? false
+                      // Format avg display: abbreviate stat unit (K=Kills, D=Deaths, A=Assists, H=Hits)
+                      const STAT_ABBR = { Kills: 'K', Deaths: 'D', Assists: 'A', Hits: 'H' }
+                      const unit = STAT_ABBR[p.statType] || ''
+                      const avgLabel = l5 != null ? `Avg: ${l5.toFixed(1)}${unit}` : null
                       return (
                         <div key={p.id} style={{
-                          background: '#1e1e1e', border: '1px solid #2a2a2a', borderRadius: 8,
-                          padding: '10px 14px', minWidth: 120, flexShrink: 0,
+                          background: '#1e1e1e', border: `1px solid ${isSharp ? '#eab30840' : '#2a2a2a'}`, borderRadius: 8,
+                          padding: '10px 14px', minWidth: 130, flexShrink: 0,
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
                             {badge && (
@@ -271,6 +276,13 @@ export default function App() {
                                 border: `1px solid ${badge.border}`, borderRadius: 3,
                                 padding: '1px 4px', fontWeight: 700, letterSpacing: 0.3,
                               }}>{badge.label}</span>
+                            )}
+                            {isSharp && (
+                              <span style={{
+                                fontSize: 8, fontWeight: 700,
+                                background: '#eab30814', color: '#eab308',
+                                border: '1px solid #eab30840', borderRadius: 3, padding: '1px 4px',
+                              }}>SHARP</span>
                             )}
                             <span style={{ fontSize: 9, color: '#555' }}>{p.league}</span>
                             <span style={{
@@ -284,9 +296,14 @@ export default function App() {
                           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--cream)', marginBottom: 2 }}>
                             {p.playerName}
                           </div>
-                          <div style={{ fontSize: 10, color: '#666', marginBottom: 6 }}>
+                          <div style={{ fontSize: 10, color: '#666', marginBottom: avgLabel ? 2 : 6 }}>
                             {p.statType} O{p.line}
                           </div>
+                          {avgLabel && (
+                            <div style={{ fontSize: 9, color: '#888', marginBottom: 6 }}>
+                              {avgLabel} · Line: O{p.line}
+                            </div>
+                          )}
                           <div style={{ fontSize: 20, fontWeight: 800, color: probColor(p.probability) }}>
                             {fmtPct(p.probability)}
                           </div>
@@ -373,7 +390,9 @@ export default function App() {
                 <div style={{ color: '#555', fontSize: 13, padding: '40px 0', textAlign: 'center' }}>Loading...</div>
               ) : sorted.length === 0 ? (
                 <div style={{ color: '#555', fontSize: 13, padding: '40px 0', textAlign: 'center' }}>
-                  No props available right now.
+                  {league === 'MLB'
+                    ? 'No MLB props available right now. PrizePicks typically posts MLB props 2–3 hours before first pitch.'
+                    : 'No props available right now.'}
                 </div>
               ) : (
                 <div style={{ overflowX: 'auto' }}>

@@ -51,7 +51,7 @@ export function usePandaScore(projections) {
   const getStatLine = useCallback((playerName, league, statType) => {
     const entry = stats[`${league}:${playerName}:${statType}`]
     if (!entry) return null
-    return { seasonAvg: entry.seasonAvg, last5Avg: entry.last5Avg }
+    return { seasonAvg: entry.seasonAvg, last5Avg: entry.last5Avg, sharp: entry.sharp ?? false }
   }, [stats])
 
   const getCalcProb = useCallback((playerName, league, statType) => {
