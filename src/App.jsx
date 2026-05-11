@@ -3,7 +3,7 @@ import { usePrizePicks } from './hooks/usePrizePicks.js'
 import { usePandaScore } from './hooks/usePandaScore.js'
 import { useSlipTracker } from './hooks/useSlipTracker.js'
 import { bestCombos } from './utils/combos.js'
-import { fmtPct, fmtEV, probColor, calcEV, calcConfidence, isLineGoblin } from './utils/ev.js'
+import { fmtPct, fmtEV, probColor, calcEV, calcConfidence, isLineGoblin, isLock } from './utils/ev.js'
 import SlipCard from './components/SlipCard.jsx'
 import StatsBadge from './components/StatsBadge.jsx'
 import SlipTracker from './components/SlipTracker.jsx'
@@ -285,13 +285,19 @@ export default function App() {
                         <td style={{ padding: '9px 10px', color: '#aaa', whiteSpace: 'nowrap' }}>{p.statType}</td>
                         <td style={{ padding: '9px 10px', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                           {p.line}
-                          {isLineGoblin(p.line, p.league, p.statType) && (
+                          {isLock(p.line, p.statType) ? (
+                            <span style={{
+                              marginLeft: 5, fontSize: 9, background: '#1d4ed822', color: '#60a5fa',
+                              border: '1px solid #1d4ed855', borderRadius: 3, padding: '1px 4px',
+                              fontWeight: 700,
+                            }}>LOCK</span>
+                          ) : isLineGoblin(p.line, p.league, p.statType) ? (
                             <span style={{
                               marginLeft: 5, fontSize: 9, background: '#16a34a22', color: '#16a34a',
                               border: '1px solid #16a34a55', borderRadius: 3, padding: '1px 4px',
                               fontWeight: 700,
                             }}>GOBLIN</span>
-                          )}
+                          ) : null}
                         </td>
                         <td style={{ padding: '9px 10px' }}>
                           {sl ? (

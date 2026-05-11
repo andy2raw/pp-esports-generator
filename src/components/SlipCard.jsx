@@ -1,4 +1,4 @@
-import { fmtPct, fmtEV, probColor, isLineGoblin } from '../utils/ev.js'
+import { fmtPct, fmtEV, probColor, isLineGoblin, isLock } from '../utils/ev.js'
 
 export default function SlipCard({ combo, rank, variant, confidence, onTrack }) {
   const { picks, ev, jointProb, goblinCount } = combo
@@ -85,13 +85,19 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack }) 
               <span style={{ fontSize: 10, color: '#888', marginLeft: 6 }}>
                 {p.statType} O{p.line}
               </span>
-              {isLineGoblin(p.line, p.league, p.statType) && (
+              {isLock(p.line, p.statType) ? (
+                <span style={{
+                  marginLeft: 5, fontSize: 9, background: '#1d4ed822', color: '#60a5fa',
+                  border: '1px solid #1d4ed855', borderRadius: 3, padding: '1px 4px',
+                  fontWeight: 700,
+                }}>LOCK</span>
+              ) : isLineGoblin(p.line, p.league, p.statType) ? (
                 <span style={{
                   marginLeft: 5, fontSize: 9, background: '#16a34a22', color: '#16a34a',
                   border: '1px solid #16a34a55', borderRadius: 3, padding: '1px 4px',
                   fontWeight: 700,
                 }}>GOBLIN</span>
-              )}
+              ) : null}
             </div>
             <span style={{ fontSize: 11, fontWeight: 700, color: probColor(p.probability) }}>
               {fmtPct(p.probability)}

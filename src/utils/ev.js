@@ -113,6 +113,12 @@ export function calcConfidence(combo, getStatLine, playerHistory) {
   return score === 5 ? (trendValues.length > 0 ? 6 : 4) : score
 }
 
+// A kills line under 1.0 is a near-certain over (e.g. O0.5 — player must get 0 kills).
+// Display as LOCK (blue) rather than GOBLIN (green).
+export function isLock(line, statType) {
+  return (statType || '').toLowerCase().includes('kill') && line < 1
+}
+
 // Returns true when a Kills line is set so low it's statistically easy to go over.
 // These are prime "goblin line" targets regardless of PrizePicks odds type.
 export function isLineGoblin(line, game, statType) {
