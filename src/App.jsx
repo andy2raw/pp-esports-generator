@@ -17,6 +17,12 @@ function scoredSort(arr) {
   return [...arr].sort((a, b) => b.probability - a.probability)
 }
 
+// CSGO tab covers both "CSGO" and "CS2" — PrizePicks sends "CS2" as the league name.
+function inLeague(p, selected) {
+  if (selected === 'CSGO') return p.league === 'CSGO' || p.league === 'CS2'
+  return p.league === selected
+}
+
 // Attach OVER/UNDER recommendation to every pick in a combo.
 // Uses L5 average vs line; defaults to OVER when no stats are available.
 function withOverUnder(combo, getStatLine) {
@@ -52,7 +58,7 @@ export default function App() {
   )
 
   const filtered = useMemo(
-    () => league === 'ALL' ? adjustedProjections : adjustedProjections.filter(p => p.league === league),
+    () => league === 'ALL' ? adjustedProjections : adjustedProjections.filter(p => inLeague(p, league)),
     [adjustedProjections, league],
   )
 
@@ -63,8 +69,8 @@ export default function App() {
 
   const slipPool = useMemo(() => {
     if (league === 'ALL') return scoredSort(adjustedProjections)
-    const primary   = scoredSort(adjustedProjections.filter(p => p.league === league))
-    const secondary = scoredSort(adjustedProjections.filter(p => p.league !== league))
+    const primary   = scoredSort(adjustedProjections.filter(p => inLeague(p, league)))
+    const secondary = scoredSort(adjustedProjections.filter(p => !inLeague(p, league)))
     return [...primary, ...secondary]
   }, [adjustedProjections, league])
 
