@@ -28,6 +28,39 @@ export function usePrizePicks() {
         inc[item.type][item.id] = item
       }
 
+      // ── League diagnostics (browser console) ──────────────────────────────
+      const allData = json.data || []
+      // First 10 raw league fields so we can see exact strings PrizePicks sends
+      console.log('[pp-raw] first 10 props league fields:',
+        allData.slice(0, 10).map(p => {
+          const playerRef = p.relationships?.new_player?.data
+          const player = playerRef ? inc?.new_player?.[playerRef.id] : null
+          return {
+            id:           p.id,
+            status:       p.attributes?.status,
+            league_name:  player?.attributes?.league_name,
+            league:       player?.attributes?.league,
+            attr_league:  p.attributes?.league,
+            stat_type:    p.attributes?.stat_type,
+          }
+        }),
+      )
+      // Count every unique league across ALL props (pre-filter)
+      const rawLeagueCounts = {}
+      for (const p of allData) {
+        const playerRef = p.relationships?.new_player?.data
+        const player = playerRef ? inc?.new_player?.[playerRef.id] : null
+        const raw = (
+          player?.attributes?.league_name ||
+          player?.attributes?.league ||
+          p.attributes?.league ||
+          'UNKNOWN'
+        )
+        rawLeagueCounts[raw] = (rawLeagueCounts[raw] || 0) + 1
+      }
+      console.log('[pp-leagues] ALL props by league (pre-filter, total=' + allData.length + '):', rawLeagueCounts)
+      // ──────────────────────────────────────────────────────────────────────
+
       const parsed = (json.data || [])
         .filter(p => {
           const s = p.attributes?.status
@@ -84,6 +117,13 @@ export function usePrizePicks() {
         // If existing is standard and current is goblin, skip current
       }
       const deduped = [...seen.values()]
+
+      // Post-filter league counts
+      const filteredLeagueCounts = {}
+      for (const p of deduped) {
+        filteredLeagueCounts[p.league] = (filteredLeagueCounts[p.league] || 0) + 1
+      }
+      console.log('[pp-leagues] FILTERED props by league (total=' + deduped.length + '):', filteredLeagueCounts)
 
       setProjections(deduped)
       setLastRefresh(new Date())
