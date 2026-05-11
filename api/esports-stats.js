@@ -104,24 +104,18 @@ function lineHeuristic(line, game, statType) {
 
   if (st.includes('kill')) {
     const isMultiMap = /1-2|1-3|combo/i.test(statType)
-    const avgs  = isMultiMap ? KILL_AVG.multimap : KILL_AVG.single
+    const avgs   = isMultiMap ? KILL_AVG.multimap : KILL_AVG.single
     const typical = avgs[g]
-    if (typical) {
+    if (typical && typical > 0) {
       const ratio = line / typical
-      if (ratio < 0.80)  {
-        console.log(`[prob] ${game} "${statType}" line=${line} typical=${typical} ratio=${ratio.toFixed(2)} → 0.640 (easy_over)`)
-        return 0.64
-      }
-      if (ratio < 0.90)  {
-        console.log(`[prob] ${game} "${statType}" line=${line} typical=${typical} ratio=${ratio.toFixed(2)} → 0.590 (below_avg)`)
-        return 0.59
-      }
-      if (ratio <= 1.10) {
-        console.log(`[prob] ${game} "${statType}" line=${line} typical=${typical} ratio=${ratio.toFixed(2)} → 0.540 (fair)`)
-        return 0.54
-      }
-      console.log(`[prob] ${game} "${statType}" line=${line} typical=${typical} ratio=${ratio.toFixed(2)} → 0.440 (tough_over)`)
-      return 0.44
+      // Continuous formula: every unique line → unique probability.
+      // ratio=0 → 1.0 (certain), ratio=1 → 0.54 (fair), ratio>1 → trending to 0.44 (tough).
+      // Power 1.2 gives a slightly concave curve so near-zero lines score very high.
+      const prob = ratio <= 1
+        ? Math.min(0.95, 0.54 + Math.pow(1 - ratio, 1.2) * 0.46)
+        : Math.max(0.44, 0.54 - (ratio - 1) * 0.25)
+      console.log(`[prob] ${game} "${statType}" line=${line} typical=${typical} ratio=${ratio.toFixed(3)} → ${prob.toFixed(3)}`)
+      return prob
     }
   }
 
