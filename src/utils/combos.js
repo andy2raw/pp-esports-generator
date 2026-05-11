@@ -34,8 +34,8 @@ function correlationFactor(picks) {
 
 const MAX_PLAYER_APPEARANCES = 2
 
-// Goblin bonus slots appended to each slip after the standard foundation.
-// [min, max] — we generate combos for every count in this range and sort by jointProb.
+// Preferred goblin bonus slots per leg count — goblins fill the tail.
+// [min, max] range; we try every count in this range and sort by jointProb.
 const GOBLIN_SLOTS = { 2: [1, 1], 3: [1, 1], 4: [1, 2], 5: [1, 2], 6: [1, 2] }
 
 function isGoblinProp(p) {
@@ -61,8 +61,15 @@ function pickResult(scored, limit) {
 
 // Build the best combos: standard (+ lock) props form the foundation;
 // goblins fill 1–2 bonus tail slots per slip.
-// Standard pool is sorted descending by probability by the caller.
-// Falls back to pure-standard combos when no goblins are available.
+//
+// Fallback ladder — guarantees sections are never empty:
+//   1. Preferred: stdPool × gobPool with gobSlots in [minGob, maxGob]
+//   2. Relaxed:   same pools but gobSlots expanded up to legCount
+//      (fills remaining foundation slots with goblins when standards are scarce)
+//   3. Full pool: unrestricted combinations from all props
+//
+// Player rotation (MAX_PLAYER_APPEARANCES) applied after scoring.
+// If rotation still leaves us short, step 3 is retried fresh.
 export function bestCombos(projections, legCount, limit = 5) {
   if (projections.length < legCount) return []
 
@@ -72,42 +79,52 @@ export function bestCombos(projections, legCount, limit = 5) {
   const standards = pool.filter(p => !isLock(p.line, p.statType) && !isGoblinProp(p))
 
   if (standards.length < 3) {
-    console.warn(`[combos] Only ${standards.length} standard props available — building with what's here`)
+    console.warn(`[combos] Only ${standards.length} standard props — filling remaining slots with best available`)
   }
 
-  // LOCKs are near-certain and may fill any foundation slot alongside standards.
+  // LOCKs are near-certain and may fill any foundation slot.
   const stdPool = [...locks, ...standards].slice(0, 20)
   const gobPool = goblins.slice(0, 10)
-
   const [minGob, maxGob] = GOBLIN_SLOTS[legCount] ?? [1, 2]
 
-  // Build candidate pick arrays: every combo of stdSlots standards × gobSlots goblins.
-  const allPicks = []
-  for (let gobSlots = minGob; gobSlots <= maxGob; gobSlots++) {
-    const stdSlots = legCount - gobSlots
-    if (stdPool.length < stdSlots || gobPool.length < gobSlots) continue
-    const stdCombos = combinations(stdPool, stdSlots)
-    const gobCombos = combinations(gobPool, gobSlots)
-    for (const sc of stdCombos) {
-      for (const gc of gobCombos) {
-        allPicks.push([...sc, ...gc])
+  function buildCandidates(gobCeiling) {
+    const picks = []
+    for (let gobSlots = minGob; gobSlots <= gobCeiling; gobSlots++) {
+      const stdSlots = legCount - gobSlots
+      if (stdPool.length < stdSlots || gobPool.length < gobSlots) continue
+      for (const sc of combinations(stdPool, stdSlots)) {
+        for (const gc of combinations(gobPool, gobSlots)) {
+          picks.push([...sc, ...gc])
+        }
       }
     }
+    return picks
   }
 
-  // No goblins today — fall back to pure-standard combos.
-  const source = allPicks.length > 0 ? allPicks : combinations(stdPool, legCount)
+  function scoreAndSort(pickArrays) {
+    return pickArrays
+      .filter(isValidSlip)
+      .map(combo => {
+        const goblinCount = combo.filter(p => p.oddsType === 'goblin').length
+        const jointProb   = combo.reduce((acc, p) => acc * p.probability, 1) * correlationFactor(combo)
+        const perLegAvg   = Math.pow(jointProb, 1 / legCount)
+        const ev          = calcEV(perLegAvg, legCount, goblinCount)
+        return { picks: combo, ev, jointProb, goblinCount }
+      })
+      .sort((a, b) => b.jointProb - a.jointProb)
+  }
 
-  const scored = source
-    .filter(isValidSlip)
-    .map(picks => {
-      const goblinCount = picks.filter(p => p.oddsType === 'goblin').length
-      const jointProb   = picks.reduce((acc, p) => acc * p.probability, 1) * correlationFactor(picks)
-      const perLegAvg   = Math.pow(jointProb, 1 / legCount)
-      const ev          = calcEV(perLegAvg, legCount, goblinCount)
-      return { picks, ev, jointProb, goblinCount }
-    })
-    .sort((a, b) => b.jointProb - a.jointProb)
+  // Fallback ladder: preferred → relaxed → full pool.
+  let candidates = buildCandidates(maxGob)
+  if (candidates.length === 0) candidates = buildCandidates(legCount)
+  if (candidates.length === 0) candidates = combinations(pool.slice(0, 25), legCount)
 
-  return pickResult(scored, limit)
+  const result = pickResult(scoreAndSort(candidates), limit)
+
+  // If player rotation still leaves us short, retry with the unrestricted full pool.
+  if (result.length < limit) {
+    return pickResult(scoreAndSort(combinations(pool.slice(0, 25), legCount)), limit)
+  }
+
+  return result
 }
