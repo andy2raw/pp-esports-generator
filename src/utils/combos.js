@@ -82,9 +82,12 @@ export function bestCombos(projections, legCount, limit = 5, sharedAppearances =
     return picks
   }
 
+  // scoreAndSort enforces the goblin cap so fallback paths can't produce
+  // all-goblin combos. Negative-EV combos sort behind positive-EV ones.
   function scoreAndSort(pickArrays) {
     return pickArrays
       .filter(isValidSlip)
+      .filter(combo => combo.filter(p => p.oddsType === 'goblin').length <= maxGob)
       .map(combo => {
         const goblinCount = combo.filter(p => p.oddsType === 'goblin').length
         const jointProb   = combo.reduce((acc, p) => acc * p.probability, 1) * correlationFactor(combo)
@@ -92,7 +95,12 @@ export function bestCombos(projections, legCount, limit = 5, sharedAppearances =
         const ev          = calcEV(perLegAvg, legCount, goblinCount)
         return { picks: combo, ev, jointProb, goblinCount }
       })
-      .sort((a, b) => b.jointProb - a.jointProb)
+      .sort((a, b) => {
+        // Positive-EV combos always rank above negative-EV
+        if (a.ev >= 0 && b.ev < 0) return -1
+        if (a.ev < 0 && b.ev >= 0) return 1
+        return b.jointProb - a.jointProb
+      })
   }
 
   const appearances = sharedAppearances ?? {}
@@ -107,5 +115,7 @@ export function bestCombos(projections, legCount, limit = 5, sharedAppearances =
     return pickResult(scoreAndSort(combinations(pool.slice(0, 25), legCount)), limit, appearances)
   }
 
-  return result
+  // Drop negative-EV results only when positive-EV alternatives exist
+  const positiveEV = result.filter(c => c.ev >= 0)
+  return positiveEV.length > 0 ? positiveEV : result
 }

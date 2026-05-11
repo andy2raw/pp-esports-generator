@@ -80,12 +80,16 @@ function resolveOverUnder(statLine, league, statType, line, currentProb) {
   return { overUnder: line >= typical ? 'UNDER' : 'OVER', probability: 0.50, sharp: true }
 }
 
-// Attach OVER/UNDER recommendation, adjusted probability, and sharp flag to every
-// pick in a combo using resolveOverUnder (handles both stats-available and null cases).
+// Leagues used for esports slip generation — MLB and others are display-only.
+const ESPORTS_LEAGUES = new Set(['CS2', 'CSGO', 'LOL', 'VAL', 'DOTA2'])
+
+// Attach OVER/UNDER to a combo's picks. If a pick already has overUnder set
+// (pre-resolved in resolvedSlipPool) skip re-applying to prevent double-adjustment.
 function withOverUnder(combo, getStatLine) {
   return {
     ...combo,
     picks: combo.picks.map(p => {
+      if (p.overUnder) return p  // already resolved — don't flip probability again
       const sl = getStatLine(p.playerName, p.league, p.statType)
       const { overUnder, probability, sharp } = resolveOverUnder(sl, p.league, p.statType, p.line, p.probability)
       return { ...p, overUnder, probability, sharp }
@@ -124,26 +128,44 @@ export default function App() {
     [filtered],
   )
 
-  const slipPool = useMemo(() => {
-    if (league === 'ALL') return scoredSort(adjustedProjections)
-    const primary   = scoredSort(adjustedProjections.filter(p => inLeague(p, league)))
-    const secondary = scoredSort(adjustedProjections.filter(p => !inLeague(p, league)))
-    return [...primary, ...secondary]
-  }, [adjustedProjections, league])
+  // Esports-only projections — MLB and other sports are excluded from slip generation.
+  const esportsProjections = useMemo(
+    () => adjustedProjections.filter(p => ESPORTS_LEAGUES.has(p.league)),
+    [adjustedProjections],
+  )
 
-  const lotteryPool = useMemo(() => scoredSort(adjustedProjections), [adjustedProjections])
-
-  // Under pool: pre-resolve each prop and keep only UNDER recommendations.
-  // Probability is already direction-adjusted (P(UNDER hit) = 1-P(OVER)) so
-  // bestCombos ranks by true UNDER probability without double-adjustment.
-  const underPool = useMemo(() => {
-    const resolved = adjustedProjections.map(p => {
+  // Pre-resolve OVER/UNDER for every esports prop so bestCombos scores by
+  // direction-adjusted probability (not raw server prob). Log first 10 for verification.
+  const resolvedSlipPool = useMemo(() => {
+    const resolved = esportsProjections.map(p => {
       const sl = getStatLine(p.playerName, p.league, p.statType)
       const { overUnder, probability, sharp } = resolveOverUnder(sl, p.league, p.statType, p.line, p.probability)
       return { ...p, overUnder, probability, sharp }
     })
-    return scoredSort(resolved.filter(p => p.overUnder === 'UNDER'))
-  }, [adjustedProjections, getStatLine])
+    const typical10 = resolved.slice(0, 10)
+    typical10.forEach(p => {
+      const typical = typicalAvg(p.league, p.statType)
+      console.log(`[ou] ${p.league} "${p.playerName}" line=${p.line} typical=${typical ?? 'n/a'} → ${p.overUnder} ${p.probability.toFixed(3)}`)
+    })
+    return resolved
+  }, [esportsProjections, getStatLine])
+
+  // slipPool: esports-only, direction-adjusted, league-prioritised.
+  // MLB is never included here — it's display-only in the table/top-picks.
+  const slipPool = useMemo(() => {
+    if (league === 'ALL' || league === 'MLB') return scoredSort(resolvedSlipPool)
+    const primary   = scoredSort(resolvedSlipPool.filter(p => inLeague(p, league)))
+    const secondary = scoredSort(resolvedSlipPool.filter(p => !inLeague(p, league)))
+    return [...primary, ...secondary]
+  }, [resolvedSlipPool, league])
+
+  const lotteryPool = useMemo(() => scoredSort(resolvedSlipPool), [resolvedSlipPool])
+
+  // Under pool: filter pre-resolved esports props to UNDER picks only.
+  const underPool = useMemo(
+    () => scoredSort(resolvedSlipPool.filter(p => p.overUnder === 'UNDER')),
+    [resolvedSlipPool],
+  )
 
   const underRaw = useMemo(() => {
     if (underPool.length < 2) return { u2: [], u3: [], u4: [] }
