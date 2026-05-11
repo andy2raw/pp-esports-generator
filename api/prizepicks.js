@@ -1,4 +1,5 @@
-const ESPORTS_LEAGUES = new Set(['LOL', 'CSGO', 'VAL', 'DOTA2', 'CS2'])
+// No server-side league filter — pass all props through so client can filter
+// by any league (esports + MLB). Log per-league counts for debugging.
 const PP_URL = 'https://partner-api.prizepicks.com/projections?per_page=250&single_stat=true'
 
 let cache = null
@@ -20,28 +21,31 @@ export default async function handler(req, res) {
 
   const json = await upstream.json()
 
+  // Build included lookup for logging
   const inc = {}
   for (const item of json.included || []) {
     if (!inc[item.type]) inc[item.type] = {}
     inc[item.type][item.id] = item
   }
 
-  const filtered = (json.data || []).filter(p => {
+  // Log per-league prop counts so we can verify MLB is coming through
+  const leagueCounts = {}
+  for (const p of json.data || []) {
     const playerRef = p.relationships?.new_player?.data
-    const player = playerRef ? inc?.new_player?.[playerRef.id] : null
-    const league = (
+    const player    = playerRef ? inc?.new_player?.[playerRef.id] : null
+    const league    = (
       player?.attributes?.league_name ||
       player?.attributes?.league ||
       p.attributes?.league ||
-      ''
+      'UNKNOWN'
     ).toUpperCase()
-    return ESPORTS_LEAGUES.has(league)
-  })
+    leagueCounts[league] = (leagueCounts[league] || 0) + 1
+  }
+  console.log('[prizepicks] total props:', (json.data || []).length, 'per league:', JSON.stringify(leagueCounts))
 
-  const result = { ...json, data: filtered }
-  cache = result
+  cache = json
   cacheTs = Date.now()
 
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30')
-  res.json(result)
+  res.json(json)
 }
