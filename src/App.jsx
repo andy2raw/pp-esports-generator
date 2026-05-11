@@ -23,15 +23,60 @@ function inLeague(p, selected) {
   return p.league === selected
 }
 
-// Attach OVER/UNDER recommendation to every pick in a combo.
-// Uses L5 average vs line; defaults to OVER when no stats are available.
+// Typical kill averages per game/map-count used when no player stats are available.
+function typicalKillAvg(league, statType) {
+  const g  = (league || '').toUpperCase()
+  const st = (statType || '').toLowerCase()
+  if (!st.includes('kill')) return null
+  const is12 = /1-2/i.test(st)
+  const is13 = /1-3/i.test(st)
+  if (g === 'CS2' || g === 'CSGO') return is13 ? 42 : is12 ? 28 : 16
+  if (g === 'LOL')                  return is13 ? 14 : is12 ? 10 : 6
+  if (g === 'VAL')                  return is12 ? 32 : 18
+  if (g === 'DOTA2')                return 10
+  return null
+}
+
+// Resolve OVER/UNDER direction, probability, and sharp flag for a single prop.
+// When L5/season stats exist: compare to line directly.
+// When stats are null: compare line to game/stat typical average.
+function resolveOverUnder(statLine, league, statType, line, currentProb) {
+  const l5 = statLine?.last5Avg ?? statLine?.seasonAvg
+
+  if (l5 != null) {
+    return {
+      overUnder:   l5 > line ? 'OVER' : 'UNDER',
+      probability: currentProb,
+      sharp:       statLine?.sharp ?? false,
+    }
+  }
+
+  // No player stats — fall back to typical averages for kills props
+  const typical = typicalKillAvg(league, statType)
+  if (typical == null) return { overUnder: 'OVER', probability: currentProb, sharp: false }
+
+  const ratio = line / typical
+  if (ratio > 1.10) {
+    // Line is meaningfully above typical → lean UNDER; flip displayed probability
+    return { overUnder: 'UNDER', probability: Math.max(0.44, 1 - currentProb), sharp: false }
+  }
+  if (ratio < 0.90) {
+    // Line is meaningfully below typical → lean OVER
+    return { overUnder: 'OVER', probability: currentProb, sharp: false }
+  }
+  // Within 10% of typical → genuine toss-up
+  return { overUnder: line >= typical ? 'UNDER' : 'OVER', probability: 0.50, sharp: true }
+}
+
+// Attach OVER/UNDER recommendation, adjusted probability, and sharp flag to every
+// pick in a combo using resolveOverUnder (handles both stats-available and null cases).
 function withOverUnder(combo, getStatLine) {
   return {
     ...combo,
     picks: combo.picks.map(p => {
       const sl = getStatLine(p.playerName, p.league, p.statType)
-      const l5 = sl?.last5Avg ?? sl?.seasonAvg
-      return { ...p, overUnder: l5 != null ? (l5 > p.line ? 'OVER' : 'UNDER') : 'OVER', sharp: sl?.sharp ?? false }
+      const { overUnder, probability, sharp } = resolveOverUnder(sl, p.league, p.statType, p.line, p.probability)
+      return { ...p, overUnder, probability, sharp }
     }),
   }
 }
@@ -277,8 +322,8 @@ export default function App() {
                                    : null
                       const sl = getStatLine(p.playerName, p.league, p.statType)
                       const l5 = sl?.last5Avg ?? sl?.seasonAvg
-                      const overUnder = l5 != null ? (l5 > p.line ? 'OVER' : 'UNDER') : 'OVER'
-                      const isSharp = sl?.sharp ?? false
+                      const { overUnder, probability: displayProb, sharp: isSharp } =
+                        resolveOverUnder(sl, p.league, p.statType, p.line, p.probability)
                       // Format avg display: abbreviate stat unit (K=Kills, D=Deaths, A=Assists, H=Hits)
                       const STAT_ABBR = { Kills: 'K', Deaths: 'D', Assists: 'A', Hits: 'H' }
                       const unit = STAT_ABBR[p.statType] || ''
@@ -323,8 +368,8 @@ export default function App() {
                               {avgLabel} · Line: O{p.line}
                             </div>
                           )}
-                          <div style={{ fontSize: 20, fontWeight: 800, color: probColor(p.probability) }}>
-                            {fmtPct(p.probability)}
+                          <div style={{ fontSize: 20, fontWeight: 800, color: probColor(displayProb) }}>
+                            {fmtPct(displayProb)}
                           </div>
                         </div>
                       )
@@ -429,11 +474,11 @@ export default function App() {
                       {sorted.map(p => {
                         const ppGoblin = p.oddsType === 'goblin'
                         const goblinDisplay = isGoblin(p)
-                        const ev2 = calcEV(p.probability, 2, ppGoblin ? 1 : 0)
-                        const ev4 = calcEV(p.probability, 4, ppGoblin ? 1 : 0)
                         const sl = getStatLine(p.playerName, p.league, p.statType)
-                        const l5 = sl?.last5Avg ?? sl?.seasonAvg
-                        const overUnder = l5 != null ? (l5 > p.line ? 'OVER' : 'UNDER') : null
+                        const { overUnder, probability: displayProb, sharp: propSharp } =
+                          resolveOverUnder(sl, p.league, p.statType, p.line, p.probability)
+                        const ev2 = calcEV(displayProb, 2, ppGoblin ? 1 : 0)
+                        const ev4 = calcEV(displayProb, 4, ppGoblin ? 1 : 0)
                         const hasHistory = playerHistory[p.playerName]
                         return (
                           <tr key={p.id} style={{ borderBottom: '1px solid #1f1f1f' }}>
@@ -460,18 +505,21 @@ export default function App() {
                               ) : null}
                             </td>
                             <td style={{ padding: '9px 10px' }}>
-                              {overUnder ? (
+                              <span style={{
+                                fontSize: 9, fontWeight: 700,
+                                background: overUnder === 'OVER' ? '#22c55e14' : '#ef444414',
+                                color: overUnder === 'OVER' ? '#22c55e' : '#ef4444',
+                                border: `1px solid ${overUnder === 'OVER' ? '#22c55e40' : '#ef444440'}`,
+                                borderRadius: 3, padding: '2px 5px',
+                              }}>
+                                {overUnder}
+                              </span>
+                              {propSharp && (
                                 <span style={{
-                                  fontSize: 9, fontWeight: 700,
-                                  background: overUnder === 'OVER' ? '#22c55e14' : '#ef444414',
-                                  color: overUnder === 'OVER' ? '#22c55e' : '#ef4444',
-                                  border: `1px solid ${overUnder === 'OVER' ? '#22c55e40' : '#ef444440'}`,
-                                  borderRadius: 3, padding: '2px 5px',
-                                }}>{overUnder}</span>
-                              ) : psLoading ? (
-                                <span style={{ color: '#444', fontSize: 10 }}>…</span>
-                              ) : (
-                                <span style={{ fontSize: 9, color: '#444' }}>OVER</span>
+                                  marginLeft: 4, fontSize: 9, fontWeight: 700,
+                                  background: '#eab30814', color: '#eab308',
+                                  border: '1px solid #eab30840', borderRadius: 3, padding: '2px 4px',
+                                }}>~</span>
                               )}
                             </td>
                             <td style={{ padding: '9px 10px' }}>
@@ -481,8 +529,8 @@ export default function App() {
                                 <span style={{ color: '#444', fontSize: 10 }}>…</span>
                               ) : null}
                             </td>
-                            <td style={{ padding: '9px 10px', fontWeight: 700, color: probColor(p.probability) }}>
-                              {fmtPct(p.probability)}
+                            <td style={{ padding: '9px 10px', fontWeight: 700, color: probColor(displayProb) }}>
+                              {fmtPct(displayProb)}
                             </td>
                             <td style={{ padding: '9px 10px', color: ev2 >= 0 ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>
                               {fmtEV(ev2)}
