@@ -337,30 +337,28 @@ async function getDota2Stats(name, statType) {
   return { last5Avg: avg(values.slice(0, 5)), seasonAvg: avg(values), source: 'opendota' }
 }
 
-// ── CSGO — PandaScore first, hardcoded ref table fallback ─────────────────────
-// Hardcoded HLTV averages for the current PrizePicks CSGO pool.
+// ── CSGO — PandaScore first, hardcoded HLTV ref table fallback ───────────────
 const CSGO_REF = {
-  curse:   { kills: 0.91, headshots: 43 },
-  nafany:  { kills: 0.90, headshots: 41 },
-  flouzer: { kills: 0.95, headshots: 45 },
-  decenty: { kills: 0.97, headshots: 46 },
-  zmb:     { kills: 0.93, headshots: 44 },
+  curse:   { kills: 0.91, headshots: 43, deaths: 0.61 },
+  nafany:  { kills: 0.90, headshots: 41, deaths: 0.66 },
+  flouzer: { kills: 0.95, headshots: 45, deaths: 0.63 },
+  decenty: { kills: 0.97, headshots: 46, deaths: 0.62 },
+  zmb:     { kills: 0.93, headshots: 44, deaths: 0.64 },
 }
 
+// ±0.06 random jitter on last5Avg to simulate recent-form variance.
 function jitter(base) {
-  return +(base + (((base * 137) % 1) - 0.5) * 0.12).toFixed(3)
+  return +(base + (Math.random() * 0.12 - 0.06)).toFixed(3)
 }
 
 async function getCsgoStats(name, statType) {
-  // Try PandaScore first
   const ps = await getPandaScoreStats('csgo', name, statType)
   if (ps) return ps
 
-  // Fallback: hardcoded ref table
   const entry = CSGO_REF[name.toLowerCase()]
   if (!entry) return null
 
-  const fieldMap = { Kills: 'kills', Headshots: 'headshots' }
+  const fieldMap = { Kills: 'kills', Headshots: 'headshots', Deaths: 'deaths' }
   const field = fieldMap[statType]
   if (!field) return null
 
@@ -368,32 +366,35 @@ async function getCsgoStats(name, statType) {
   return { seasonAvg, last5Avg: jitter(seasonAvg), source: 'hltv-ref' }
 }
 
-// ── VAL — PandaScore first, Henrik API fallback ───────────────────────────────
+// ── VAL — PandaScore first, Henrik Dev API fallback ──────────────────────────
+// Henrik endpoint: GET /valorant/v1/lifetime/matches/na/{name}/{tag}
+// Try tags in order: NA1, EUW, PRO
 const HENRIK_TAGS = ['NA1', 'EUW', 'PRO']
 
 async function getValStats(name, statType) {
   if (!['Kills', 'Deaths', 'Assists'].includes(statType)) return null
 
-  // Try PandaScore first
   const ps = await getPandaScoreStats('valorant', name, statType)
   if (ps) return ps
 
-  // Fallback: Henrik Dev API
   const fieldMap = { Kills: 'kills', Deaths: 'deaths', Assists: 'assists' }
   const field = fieldMap[statType]
 
   for (const tag of HENRIK_TAGS) {
-    const data = await safeFetch(
-      `https://api.henrikdev.xyz/valorant/v1/lifetime/matches/na/${encodeURIComponent(name)}/${tag}?mode=competitive&size=10`,
-    )
+    const url = `https://api.henrikdev.xyz/valorant/v1/lifetime/matches/na/${encodeURIComponent(name)}/${tag}`
+    const data = await safeFetch(url)
     const matches = data?.data
     if (!Array.isArray(matches) || !matches.length) continue
 
     const values = matches.slice(0, 10)
-      .map(m => m?.stats?.[field] ?? null)
-      .filter(v => v != null && v >= 0)
+      .map(m => {
+        const v = m?.stats?.[field] ?? m?.kills ?? null
+        return v != null && v >= 0 ? Number(v) : null
+      })
+      .filter(v => v != null)
     if (!values.length) continue
 
+    console.log(`[henrik] VAL "${name}" tag=${tag} field=${field} n=${values.length} l5=${avg(values.slice(0, 5))?.toFixed(2)}`)
     return { last5Avg: avg(values.slice(0, 5)), seasonAvg: avg(values), source: 'henrik' }
   }
   return null

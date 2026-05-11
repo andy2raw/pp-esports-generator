@@ -119,6 +119,13 @@ export function isLock(line, statType) {
   return (statType || '').toLowerCase().includes('kill') && line < 1
 }
 
+// Source of truth: PrizePicks oddsType field.
+// Falls back to line-based detection only when oddsType is absent/null.
+export function isGoblin(p) {
+  if (p.oddsType) return p.oddsType === 'goblin'
+  return isLineGoblin(p.line, p.league, p.statType)
+}
+
 // Returns true when a Kills line is set so low it's statistically easy to go over.
 // These are prime "goblin line" targets regardless of PrizePicks odds type.
 export function isLineGoblin(line, game, statType) {

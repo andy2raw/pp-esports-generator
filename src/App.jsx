@@ -3,7 +3,7 @@ import { usePrizePicks } from './hooks/usePrizePicks.js'
 import { usePandaScore } from './hooks/usePandaScore.js'
 import { useSlipTracker } from './hooks/useSlipTracker.js'
 import { bestCombos } from './utils/combos.js'
-import { fmtPct, fmtEV, probColor, calcEV, calcConfidence, isLineGoblin, isLock } from './utils/ev.js'
+import { fmtPct, fmtEV, probColor, calcEV, calcConfidence, isLock, isGoblin } from './utils/ev.js'
 import SlipCard from './components/SlipCard.jsx'
 import StatsBadge from './components/StatsBadge.jsx'
 import SlipTracker from './components/SlipTracker.jsx'
@@ -12,8 +12,6 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 const LEAGUES = ['ALL', 'LOL', 'CSGO', 'VAL', 'DOTA2']
 
-// Sort props by hit probability descending — goblins/locks with low thresholds
-// naturally rise to the top since they carry higher win probabilities.
 function scoredSort(arr) {
   return [...arr].sort((a, b) => b.probability - a.probability)
 }
@@ -28,8 +26,6 @@ export default function App() {
     supabaseLoading,
   } = useSlipTracker()
 
-  // Use server-computed probability when available (based on real L5/season vs line).
-  // Falls back to p.probability (estimateProb from PrizePicks metadata) while loading.
   const adjustedProjections = useMemo(
     () => projections.map(p => {
       const serverProb = getCalcProb(p.playerName, p.league, p.statType)
@@ -40,20 +36,16 @@ export default function App() {
     [projections, getCalcProb],
   )
 
-  // Table view respects the active league filter
   const filtered = useMemo(
     () => league === 'ALL' ? adjustedProjections : adjustedProjections.filter(p => p.league === league),
     [adjustedProjections, league],
   )
 
-  // Table sorted purely by win probability — highest hit rate props first.
   const sorted = useMemo(
     () => [...filtered].sort((a, b) => b.probability - a.probability),
     [filtered],
   )
 
-  // Slip pool sorted by probability. When a league filter is active, that
-  // league's props appear first; other leagues fill remaining slots.
   const slipPool = useMemo(() => {
     if (league === 'ALL') return scoredSort(adjustedProjections)
     const primary   = scoredSort(adjustedProjections.filter(p => p.league === league))
@@ -61,7 +53,6 @@ export default function App() {
     return [...primary, ...secondary]
   }, [adjustedProjections, league])
 
-  // Lottery pool: all leagues sorted by probability.
   const lotteryPool = useMemo(
     () => scoredSort(adjustedProjections),
     [adjustedProjections],
@@ -70,13 +61,10 @@ export default function App() {
   // Top Picks: 3 best standard props, then 2 goblins, then 1 lock.
   const topPicks = useMemo(() => {
     const standards = slipPool.filter(p =>
-      !isLock(p.line, p.statType) &&
-      !isLineGoblin(p.line, p.league, p.statType) &&
-      p.oddsType !== 'goblin',
+      !isLock(p.line, p.statType) && !isGoblin(p),
     ).slice(0, 3)
     const goblins   = slipPool.filter(p =>
-      !isLock(p.line, p.statType) &&
-      (isLineGoblin(p.line, p.league, p.statType) || p.oddsType === 'goblin'),
+      !isLock(p.line, p.statType) && isGoblin(p),
     ).slice(0, 2)
     const locks     = slipPool.filter(p => isLock(p.line, p.statType)).slice(0, 1)
     return [...standards, ...goblins, ...locks].slice(0, 6)
@@ -87,8 +75,6 @@ export default function App() {
   const combos4Raw     = useMemo(() => bestCombos(slipPool, 4, 3),       [slipPool])
   const lotterySlipRaw = useMemo(() => bestCombos(lotteryPool, 6, 1)[0] ?? null, [lotteryPool])
 
-  // Attach a 1-10 confidence score to each combo.
-  // Recomputed whenever stats or player history update.
   const combos2 = useMemo(
     () => combos2Raw.map(c => ({ ...c, confidence: calcConfidence(c, getStatLine, playerHistory) })),
     [combos2Raw, getStatLine, playerHistory],
@@ -110,9 +96,7 @@ export default function App() {
 
   const hasSlips = combos2.length > 0 || combos3.length > 0 || combos4.length > 0 || lotterySlip
 
-  // ── Auto-save all generated slips on first successful load ─────────────────
-  // Fires once per session after both Supabase and PrizePicks data are ready.
-  // Skips any slip already saved (matched by the stable composite key).
+  // Auto-save all generated slips once per session after data is ready.
   const autoSavedRef = useRef(false)
   useEffect(() => {
     if (autoSavedRef.current) return
@@ -124,15 +108,14 @@ export default function App() {
     const existingIds = new Set(trackedSlips.map(s => s.id))
 
     function maybeAdd(combo, slipType, leagueArg) {
-      // Must match rowKey() format in useSlipTracker.js
       const key = `${slipType}|${combo.picks.length}|${Number(combo.ev).toFixed(8)}|${Number(combo.jointProb).toFixed(8)}`
       if (!existingIds.has(key)) addSlip(combo, slipType, leagueArg)
     }
 
-    combos2.forEach(c => maybeAdd(c, '2-leg', league))
-    combos3.forEach(c => maybeAdd(c, '3-leg', league))
-    combos4.forEach(c => maybeAdd(c, '4-leg', league))
-    if (lotterySlip) maybeAdd(lotterySlip, 'lottery-6', 'ALL')
+    combos2.forEach(c => maybeAdd(c, 'Precision 2-Leg', league))
+    combos3.forEach(c => maybeAdd(c, 'Edge 3-Leg', league))
+    combos4.forEach(c => maybeAdd(c, 'Core 4-Leg', league))
+    if (lotterySlip) maybeAdd(lotterySlip, 'Lottery 6-Leg', 'ALL')
   }, [supabaseLoading, combos2, combos3, combos4, lotterySlip, trackedSlips, addSlip, league])
 
   return (
@@ -168,6 +151,7 @@ export default function App() {
         </div>
       </header>
 
+      {/* League filter */}
       <div style={{ padding: '12px 16px', borderBottom: '1px solid #2a2a2a', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
         {LEAGUES.map(l => (
           <button
@@ -197,26 +181,25 @@ export default function App() {
 
       <div style={{ padding: '16px' }}>
         <p style={{ margin: '0 0 14px', fontSize: 11, color: '#555', lineHeight: 1.5 }}>
-          Goblin lines detected — targeting highest hit rate props.
+          Standard props form the foundation of every slip. Goblins are bonus picks — max 1 per 2/3-leg, max 2 per 4/6-leg.
         </p>
 
+        {/* ── Top Picks Today ─────────────────────────────────────────── */}
         {topPicks.length > 0 && (
           <ErrorBoundary label="Top picks error">
-            <div style={{ marginBottom: 24 }}>
+            <div style={{ marginBottom: 28 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 10 }}>
                 TOP PICKS TODAY
               </div>
               <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
                 {topPicks.map(p => {
-                  const lock    = isLock(p.line, p.statType)
-                  const gobLine = !lock && isLineGoblin(p.line, p.league, p.statType)
-                  const ppGob   = !lock && !gobLine && p.oddsType === 'goblin'
-                  const demon   = p.oddsType === 'demon'
-                  const badge   = lock ? { label: 'LOCK',  bg: '#1d4ed822', color: '#60a5fa', border: '#1d4ed855' }
-                                : gobLine ? { label: 'GOBLIN', bg: '#16a34a22', color: '#16a34a', border: '#16a34a55' }
-                                : ppGob   ? { label: 'GOB',    bg: '#f59e0b22', color: '#f59e0b', border: '#f59e0b55' }
-                                : demon   ? { label: 'DEMON',  bg: '#6b21a822', color: '#a78bfa', border: '#6b21a855' }
-                                : null
+                  const lock   = isLock(p.line, p.statType)
+                  const goblin = !lock && isGoblin(p)
+                  const demon  = p.oddsType === 'demon'
+                  const badge  = lock   ? { label: 'LOCK',  bg: '#1d4ed822', color: '#60a5fa', border: '#1d4ed855' }
+                               : goblin ? { label: 'GOBLIN', bg: '#16a34a22', color: '#16a34a', border: '#16a34a55' }
+                               : demon  ? { label: 'DEMON',  bg: '#6b21a822', color: '#a78bfa', border: '#6b21a855' }
+                               : null
                   return (
                     <div key={p.id} style={{
                       background: '#1e1e1e', border: '1px solid #2a2a2a', borderRadius: 8,
@@ -249,49 +232,79 @@ export default function App() {
           </ErrorBoundary>
         )}
 
+        {/* ── Slip sections ───────────────────────────────────────────── */}
         {hasSlips && (
           <ErrorBoundary label="Slip cards error">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 28 }}>
-              {combos2.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>2-LEG SLIPS</div>
-                  {combos2.map((c, i) => (
-                    <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
-                      onTrack={() => addSlip(c, '2-leg', league)} />
-                  ))}
+
+            {/* Hero: Core 4-Leg (flagship) */}
+            {combos4.length > 0 && (
+              <div style={{ marginBottom: 32 }}>
+                <div style={{
+                  fontSize: 13, fontWeight: 800, color: '#c9a84c', letterSpacing: 1, marginBottom: 12,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  ★ CORE 4-LEG
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, color: '#888', background: '#2a2a1a',
+                    border: '1px solid #444', borderRadius: 4, padding: '2px 6px', letterSpacing: 0.5,
+                  }}>FLAGSHIP</span>
                 </div>
-              )}
-              {combos3.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>3-LEG SLIPS</div>
-                  {combos3.map((c, i) => (
-                    <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
-                      onTrack={() => addSlip(c, '3-leg', league)} />
-                  ))}
-                </div>
-              )}
-              {combos4.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>4-LEG SLIPS</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
                   {combos4.map((c, i) => (
-                    <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
-                      onTrack={() => addSlip(c, '4-leg', league)} />
+                    <SlipCard key={i} combo={c} rank={i + 1} variant="core4" confidence={c.confidence}
+                      onTrack={() => addSlip(c, 'Core 4-Leg', league)} />
                   ))}
                 </div>
-              )}
-              {lotterySlip && (
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', letterSpacing: 1, marginBottom: 8 }}>6-LEG LOTTERY</div>
-                  <SlipCard combo={lotterySlip} rank={1} variant="lottery" confidence={lotterySlip.confidence}
-                    onTrack={() => addSlip(lotterySlip, 'lottery-6', 'ALL')} />
-                </div>
-              )}
+              </div>
+            )}
+
+            {/* Two-column: left (Precision 2-Leg + Edge 3-Leg), right (Lottery 6-Leg) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+              {/* Left column */}
+              <div>
+                {combos2.length > 0 && (
+                  <div style={{ marginBottom: 24 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>
+                      PRECISION 2-LEG
+                    </div>
+                    {combos2.map((c, i) => (
+                      <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
+                        onTrack={() => addSlip(c, 'Precision 2-Leg', league)} />
+                    ))}
+                  </div>
+                )}
+                {combos3.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>
+                      EDGE 3-LEG
+                    </div>
+                    {combos3.map((c, i) => (
+                      <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
+                        onTrack={() => addSlip(c, 'Edge 3-Leg', league)} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Right column: Lottery 6-Leg */}
+              <div>
+                {lotterySlip && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', letterSpacing: 1, marginBottom: 8 }}>
+                      LOTTERY 6-LEG
+                    </div>
+                    <SlipCard combo={lotterySlip} rank={1} variant="lottery" confidence={lotterySlip.confidence}
+                      onTrack={() => addSlip(lotterySlip, 'Lottery 6-Leg', 'ALL')} />
+                  </div>
+                )}
+              </div>
             </div>
           </ErrorBoundary>
         )}
 
+        {/* ── All Projections table ────────────────────────────────────── */}
         <ErrorBoundary label="Projections table error">
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 10 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 10, marginTop: 32 }}>
             ALL PROJECTIONS
           </div>
           {loading && !projections.length ? (
@@ -314,16 +327,17 @@ export default function App() {
                 </thead>
                 <tbody>
                   {sorted.map(p => {
-                    const goblin = p.oddsType === 'goblin'
-                    const ev2 = calcEV(p.probability, 2, goblin ? 1 : 0)
-                    const ev4 = calcEV(p.probability, 4, goblin ? 1 : 0)
+                    const ppGoblin  = p.oddsType === 'goblin'  // for EV multiplier (PrizePicks designation)
+                    const goblinDisplay = isGoblin(p)
+                    const ev2 = calcEV(p.probability, 2, ppGoblin ? 1 : 0)
+                    const ev4 = calcEV(p.probability, 4, ppGoblin ? 1 : 0)
                     const sl = getStatLine(p.playerName, p.league, p.statType)
                     const hasHistory = playerHistory[p.playerName]
                     return (
                       <tr key={p.id} style={{ borderBottom: '1px solid #1f1f1f' }}>
                         <td style={{ padding: '9px 10px', color: 'var(--cream)', fontWeight: 600, whiteSpace: 'nowrap' }}>
                           {p.playerName}
-                          {goblin && (
+                          {ppGoblin && (
                             <span style={{
                               marginLeft: 5, fontSize: 9, background: '#f59e0b22', color: '#f59e0b',
                               border: '1px solid #f59e0b55', borderRadius: 3, padding: '1px 4px',
@@ -343,14 +357,12 @@ export default function App() {
                           {isLock(p.line, p.statType) ? (
                             <span style={{
                               marginLeft: 5, fontSize: 9, background: '#1d4ed822', color: '#60a5fa',
-                              border: '1px solid #1d4ed855', borderRadius: 3, padding: '1px 4px',
-                              fontWeight: 700,
+                              border: '1px solid #1d4ed855', borderRadius: 3, padding: '1px 4px', fontWeight: 700,
                             }}>LOCK</span>
-                          ) : isLineGoblin(p.line, p.league, p.statType) ? (
+                          ) : goblinDisplay ? (
                             <span style={{
                               marginLeft: 5, fontSize: 9, background: '#16a34a22', color: '#16a34a',
-                              border: '1px solid #16a34a55', borderRadius: 3, padding: '1px 4px',
-                              fontWeight: 700,
+                              border: '1px solid #16a34a55', borderRadius: 3, padding: '1px 4px', fontWeight: 700,
                             }}>GOBLIN</span>
                           ) : null}
                         </td>
