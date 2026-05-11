@@ -10,7 +10,6 @@ function combinations(arr, k) {
   ]
 }
 
-// Only reject picks where two players share the exact same team name.
 function isValidSlip(picks) {
   const seen = new Set()
   for (const p of picks) {
@@ -21,7 +20,6 @@ function isValidSlip(picks) {
   return true
 }
 
-// 15% joint-probability penalty per same-team pair in a combo.
 function correlationFactor(picks) {
   let pairs = 0
   for (let i = 0; i < picks.length; i++) {
@@ -33,13 +31,11 @@ function correlationFactor(picks) {
 }
 
 const MAX_PLAYER_APPEARANCES = 2
-
-// Max goblin props per slip (0 = no goblins required, these are ceilings only).
-// Standards form the foundation; goblins can fill remaining slots up to the cap.
 const MAX_GOBLINS = { 2: 1, 3: 1, 4: 2, 5: 2, 6: 2 }
 
-function pickResult(scored, limit) {
-  const appearances = {}
+// sharedAppearances allows coordinated rotation across multiple bestCombos calls
+// so no player appears more than MAX_PLAYER_APPEARANCES times across all slips.
+function pickResult(scored, limit, appearances) {
   const result = []
   for (const combo of scored) {
     if (result.length >= limit) break
@@ -55,31 +51,21 @@ function pickResult(scored, limit) {
   return result
 }
 
-// Build the best combos: standard (+ lock) props form the foundation;
-// goblins fill bonus slots up to MAX_GOBLINS[legCount].
-// Slips are sorted by joint probability descending — highest-winProb props rise naturally.
-//
-// Fallback ladder — sections are never empty:
-//   1. Preferred: stdPool × gobPool with gobSlots in [0, maxGob]
-//   2. Relaxed:   expand goblin budget up to legCount when standards are scarce
-//   3. Full pool: unrestricted combinations from all props
-//
-// Player rotation (MAX_PLAYER_APPEARANCES) applied after scoring.
-export function bestCombos(projections, legCount, limit = 5) {
+export function bestCombos(projections, legCount, limit = 5, sharedAppearances = null) {
   if (projections.length < legCount) return []
 
-  const pool      = projections.slice(0, Math.min(30, projections.length))
+  // Expanded to 50 for more variety
+  const pool      = projections.slice(0, Math.min(50, projections.length))
   const locks     = pool.filter(p => isLock(p.line, p.statType))
   const goblins   = pool.filter(p => !isLock(p.line, p.statType) && isGoblin(p))
   const standards = pool.filter(p => !isLock(p.line, p.statType) && !isGoblin(p))
 
   if (standards.length < 3) {
-    console.warn(`[combos] Only ${standards.length} standard props — filling remaining slots with best available`)
+    console.warn(`[combos] Only ${standards.length} standard props — filling with best available`)
   }
 
-  // LOCKs are near-certain and may fill any foundation slot.
-  const stdPool = [...locks, ...standards].slice(0, 20)
-  const gobPool = goblins.slice(0, 10)
+  const stdPool = [...locks, ...standards].slice(0, 25)
+  const gobPool = goblins.slice(0, 12)
   const maxGob  = MAX_GOBLINS[legCount] ?? Math.floor(legCount / 2)
 
   function buildCandidates(gobCeiling) {
@@ -109,16 +95,16 @@ export function bestCombos(projections, legCount, limit = 5) {
       .sort((a, b) => b.jointProb - a.jointProb)
   }
 
-  // Fallback ladder: preferred → relaxed → full pool.
+  const appearances = sharedAppearances ?? {}
+
   let candidates = buildCandidates(maxGob)
   if (candidates.length === 0) candidates = buildCandidates(legCount)
   if (candidates.length === 0) candidates = combinations(pool.slice(0, 25), legCount)
 
-  const result = pickResult(scoreAndSort(candidates), limit)
+  const result = pickResult(scoreAndSort(candidates), limit, appearances)
 
-  // If player rotation still leaves us short, retry with unrestricted full pool.
   if (result.length < limit) {
-    return pickResult(scoreAndSort(combinations(pool.slice(0, 25), legCount)), limit)
+    return pickResult(scoreAndSort(combinations(pool.slice(0, 25), legCount)), limit, appearances)
   }
 
   return result

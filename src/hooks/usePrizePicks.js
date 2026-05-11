@@ -3,7 +3,7 @@ import { estimateProb } from '../utils/ev.js'
 
 const API_URL = '/api/prizepicks'
 const REFRESH_MS = 5 * 60 * 1000
-const ESPORTS_LEAGUES = new Set(['LOL', 'CSGO', 'CS2', 'VAL', 'DOTA2'])
+const ALLOWED_LEAGUES = new Set(['LOL', 'CSGO', 'CS2', 'VAL', 'DOTA2', 'MLB'])
 
 export function usePrizePicks() {
   const [projections, setProjections] = useState([])
@@ -47,7 +47,7 @@ export function usePrizePicks() {
 
           const league = leagueRaw === 'CS2' ? 'CSGO' : leagueRaw
 
-          if (!ESPORTS_LEAGUES.has(leagueRaw) && !ESPORTS_LEAGUES.has(league)) return null
+          if (!ALLOWED_LEAGUES.has(leagueRaw) && !ALLOWED_LEAGUES.has(league)) return null
 
           const line = parseFloat(a.line_score) || 0
 

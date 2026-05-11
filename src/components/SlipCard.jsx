@@ -9,6 +9,21 @@ function riskTier(jointProb) {
   return                       { label: 'LOTTERY', color: '#ef4444', bg: '#ef444414', border: '#ef444440' }
 }
 
+function correlationRating(picks) {
+  const teamCounts = {}
+  for (const p of picks) {
+    if (p.team) teamCounts[p.team] = (teamCounts[p.team] ?? 0) + 1
+  }
+  if (Object.values(teamCounts).some(c => c > 1)) {
+    return { label: 'CORRELATED',  color: '#ef4444', bg: '#ef444414', border: '#ef444440' }
+  }
+  const uniqueLeagues = new Set(picks.map(p => p.league || ''))
+  if (uniqueLeagues.size === picks.length) {
+    return { label: 'INDEPENDENT', color: '#22c55e', bg: '#22c55e14', border: '#22c55e40' }
+  }
+  return   { label: 'NEUTRAL',    color: '#eab308', bg: '#eab30814', border: '#eab30840' }
+}
+
 function whySelected({ picks, goblinCount }) {
   const games = new Set(picks.map(p => p.league || '')).size
   const crossGame = games >= 2
@@ -27,6 +42,7 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack }) 
   const isCore4   = variant === 'core4'
 
   const risk      = riskTier(jointProb)
+  const corr      = correlationRating(picks)
   const whyLine   = whySelected(combo)
   const slipLabel = SLIP_LABELS[legCount] || `${legCount}-LEG`
 
@@ -54,6 +70,13 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack }) 
           {isCore4 ? `★ ${slipLabel}  #${rank}` : isLottery ? slipLabel : `#${rank} — ${slipLabel}`}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          {/* Correlation */}
+          <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: 0.3,
+            background: corr.bg, color: corr.color, border: `1px solid ${corr.border}`,
+            borderRadius: 4, padding: '2px 5px',
+          }}>{corr.label}</span>
+
           {/* Risk tier */}
           <span style={{
             fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
@@ -125,43 +148,53 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack }) 
           const weakest   = hasDiversity && p.probability === minProb
           const goblin    = !isLock(p.line, p.statType) && isGoblin(p)
           return (
-            <div key={p.id} className="slip-card-pick" style={{
+            <div key={p.id ?? `${p.playerName}-${p.statType}`} className="slip-card-pick" style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               padding: '6px 10px',
               background: strongest ? '#0d1f0d' : weakest ? '#1f0d0d' : (isLottery ? '#17140a' : '#1c1c1c'),
               borderRadius: 6,
               border: strongest ? '1px solid #22c55e22' : weakest ? '1px solid #ef444422' : 'none',
             }}>
-              <div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--cream)' }}>
                   {p.playerName}
                 </span>
-                {strongest && <span style={{ marginLeft: 4, fontSize: 11 }} title="Strongest leg">⚡</span>}
-                {weakest   && <span style={{ marginLeft: 4, fontSize: 11 }} title="Weakest leg">⚠️</span>}
+                {strongest && <span style={{ fontSize: 11 }} title="Strongest leg">⚡</span>}
+                {weakest   && <span style={{ fontSize: 11 }} title="Weakest leg">⚠️</span>}
                 {goblin && (
                   <span style={{
-                    marginLeft: 5, fontSize: 9, background: '#16a34a22', color: '#16a34a',
+                    fontSize: 9, background: '#16a34a22', color: '#16a34a',
                     border: '1px solid #16a34a55', borderRadius: 3, padding: '1px 4px', fontWeight: 700,
                   }}>GOBLIN</span>
                 )}
                 {isLock(p.line, p.statType) && (
                   <span style={{
-                    marginLeft: 5, fontSize: 9, background: '#1d4ed822', color: '#60a5fa',
+                    fontSize: 9, background: '#1d4ed822', color: '#60a5fa',
                     border: '1px solid #1d4ed855', borderRadius: 3, padding: '1px 4px', fontWeight: 700,
                   }}>LOCK</span>
                 )}
                 {p.oddsType === 'demon' && (
                   <span style={{
-                    marginLeft: 5, fontSize: 9, background: '#6b21a822', color: '#a78bfa',
+                    fontSize: 9, background: '#6b21a822', color: '#a78bfa',
                     border: '1px solid #6b21a855', borderRadius: 3, padding: '1px 4px', fontWeight: 700,
                   }}>DEMON</span>
                 )}
-                <span style={{ fontSize: 10, color: '#888', marginLeft: 6 }}>
+                <span style={{ fontSize: 10, color: '#888' }}>
                   {p.statType} O{p.line}
                 </span>
+                {/* OVER/UNDER recommendation */}
+                {p.overUnder && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 700,
+                    background: p.overUnder === 'OVER' ? '#22c55e14' : '#ef444414',
+                    color: p.overUnder === 'OVER' ? '#22c55e' : '#ef4444',
+                    border: `1px solid ${p.overUnder === 'OVER' ? '#22c55e40' : '#ef444440'}`,
+                    borderRadius: 3, padding: '1px 4px',
+                  }}>{p.overUnder}</span>
+                )}
               </div>
               <span style={{
-                fontSize: 11, fontWeight: 700,
+                fontSize: 11, fontWeight: 700, flexShrink: 0, marginLeft: 8,
                 color: strongest ? 'var(--green)' : weakest ? 'var(--red)' : probColor(p.probability),
               }}>
                 {fmtPct(p.probability)}

@@ -20,6 +20,19 @@
  *
  * Migration — run once to enable missed-leg tracking:
  * alter table slips add column if not exists missed_leg text;
+ *
+ * Ladder Challenge table — run once:
+ * create table ladder (
+ *   id           uuid primary key default gen_random_uuid(),
+ *   created_at   timestamptz default now(),
+ *   streak       integer default 0,
+ *   bankroll     numeric default 10,
+ *   result       text default 'Pending',
+ *   slip_picks   jsonb,
+ *   entry_amount numeric default 10
+ * );
+ * alter table ladder enable row level security;
+ * create policy "public access" on ladder for all using (true) with check (true);
  */
 
 import { createClient } from '@supabase/supabase-js'

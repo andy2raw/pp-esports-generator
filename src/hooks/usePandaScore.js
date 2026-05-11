@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 
 async function fetchStats(name, game, statType, line) {
   try {
+    const endpoint = game?.toUpperCase() === 'MLB' ? '/api/mlb-stats' : '/api/esports-stats'
     const qs = new URLSearchParams({ name, game, statType, line: String(line) })
-    const res = await fetch(`/api/esports-stats?${qs}`)
+    const res = await fetch(`${endpoint}?${qs}`)
     if (!res.ok) return null
     return res.json().catch(() => null)
   } catch {
@@ -11,9 +12,7 @@ async function fetchStats(name, game, statType, line) {
   }
 }
 
-// Renamed from usePandaScore but kept as the same export so no other file needs to change.
 export function usePandaScore(projections) {
-  // stats key: "LEAGUE:playerName:statType" → { seasonAvg, last5Avg, source, probability }
   const [stats, setStats] = useState({})
   const [loading, setLoading] = useState(false)
   const fetchedRef = useRef(new Set())
@@ -42,9 +41,7 @@ export function usePandaScore(projections) {
         fetchedRef.current.add(key)
         const result = await fetchStats(p.playerName, p.league, p.statType, p.line)
         if (cancelled || !result) return
-        if (result) {
-          setStats(prev => ({ ...prev, [key]: result }))
-        }
+        setStats(prev => ({ ...prev, [key]: result }))
       }),
     ).finally(() => { if (!cancelled) setLoading(false) })
 
@@ -57,7 +54,6 @@ export function usePandaScore(projections) {
     return { seasonAvg: entry.seasonAvg, last5Avg: entry.last5Avg }
   }, [stats])
 
-  // Returns the server-computed probability for a pick, or null if not yet loaded.
   const getCalcProb = useCallback((playerName, league, statType) => {
     return stats[`${league}:${playerName}:${statType}`]?.probability ?? null
   }, [stats])
