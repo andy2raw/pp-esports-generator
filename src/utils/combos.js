@@ -1,4 +1,4 @@
-import { calcEV } from './ev.js'
+import { calcEV, isLock, isLineGoblin } from './ev.js'
 
 function combinations(arr, k) {
   if (k === 0) return [[]]
@@ -34,8 +34,13 @@ function correlationFactor(picks) {
 
 const MAX_PLAYER_APPEARANCES = 2
 
-// Max goblins (oddsType === 'goblin') per slip — at most 50% of legs.
-const MAX_GOBLINS = { 2: 1, 3: 1, 4: 2, 5: 2, 6: 3 }
+// Goblin bonus slots appended to each slip after the standard foundation.
+// [min, max] — we generate combos for every count in this range and sort by jointProb.
+const GOBLIN_SLOTS = { 2: [1, 1], 3: [1, 1], 4: [1, 2], 5: [1, 2], 6: [1, 2] }
+
+function isGoblinProp(p) {
+  return p.oddsType === 'goblin' || isLineGoblin(p.line, p.league, p.statType)
+}
 
 function pickResult(scored, limit) {
   const appearances = {}
@@ -54,17 +59,46 @@ function pickResult(scored, limit) {
   return result
 }
 
-// Build the best combos by maximizing joint win probability.
-// Pool must already be sorted in descending probability order by the caller.
-// Each player appears in at most MAX_PLAYER_APPEARANCES combos for variety.
-// Each slip has at most MAX_GOBLINS[legCount] goblin props; falls back to
-// unconstrained selection when there aren't enough diverse props to fill the limit.
+// Build the best combos: standard (+ lock) props form the foundation;
+// goblins fill 1–2 bonus tail slots per slip.
+// Standard pool is sorted descending by probability by the caller.
+// Falls back to pure-standard combos when no goblins are available.
 export function bestCombos(projections, legCount, limit = 5) {
   if (projections.length < legCount) return []
-  const pool = projections.slice(0, Math.min(30, projections.length))
-  const maxGob = MAX_GOBLINS[legCount] ?? Math.floor(legCount / 2)
 
-  const scored = combinations(pool, legCount)
+  const pool      = projections.slice(0, Math.min(30, projections.length))
+  const locks     = pool.filter(p => isLock(p.line, p.statType))
+  const goblins   = pool.filter(p => !isLock(p.line, p.statType) && isGoblinProp(p))
+  const standards = pool.filter(p => !isLock(p.line, p.statType) && !isGoblinProp(p))
+
+  if (standards.length < 3) {
+    console.warn(`[combos] Only ${standards.length} standard props available — building with what's here`)
+  }
+
+  // LOCKs are near-certain and may fill any foundation slot alongside standards.
+  const stdPool = [...locks, ...standards].slice(0, 20)
+  const gobPool = goblins.slice(0, 10)
+
+  const [minGob, maxGob] = GOBLIN_SLOTS[legCount] ?? [1, 2]
+
+  // Build candidate pick arrays: every combo of stdSlots standards × gobSlots goblins.
+  const allPicks = []
+  for (let gobSlots = minGob; gobSlots <= maxGob; gobSlots++) {
+    const stdSlots = legCount - gobSlots
+    if (stdPool.length < stdSlots || gobPool.length < gobSlots) continue
+    const stdCombos = combinations(stdPool, stdSlots)
+    const gobCombos = combinations(gobPool, gobSlots)
+    for (const sc of stdCombos) {
+      for (const gc of gobCombos) {
+        allPicks.push([...sc, ...gc])
+      }
+    }
+  }
+
+  // No goblins today — fall back to pure-standard combos.
+  const source = allPicks.length > 0 ? allPicks : combinations(stdPool, legCount)
+
+  const scored = source
     .filter(isValidSlip)
     .map(picks => {
       const goblinCount = picks.filter(p => p.oddsType === 'goblin').length
@@ -75,10 +109,5 @@ export function bestCombos(projections, legCount, limit = 5) {
     })
     .sort((a, b) => b.jointProb - a.jointProb)
 
-  const diverse = scored.filter(c => c.goblinCount <= maxGob)
-  const result = pickResult(diverse, limit)
-  // Fall back to unconstrained if diversity filter leaves fewer than requested.
-  if (result.length >= limit) return result
-  const fallback = pickResult(scored, limit)
-  return fallback.length > result.length ? fallback : result
+  return pickResult(scored, limit)
 }
