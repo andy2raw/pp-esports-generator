@@ -32,21 +32,13 @@ function correlationFactor(picks) {
   return Math.pow(0.85, pairs)
 }
 
-// Average probability of non-goblin picks (or all picks if none exist).
-// Used to rank combos within the same goblin tier.
-function cleanScore(combo) {
-  const nonGob = combo.picks.filter(p => p.oddsType !== 'goblin')
-  const src = nonGob.length ? nonGob : combo.picks
-  return src.reduce((s, p) => s + p.probability, 0) / src.length
-}
-
-// Maximum goblin props allowed per leg count.
-const MAX_GOBLINS = { 2: 1, 3: 1, 4: 2, 5: 2, 6: 2 }
 const MAX_PLAYER_APPEARANCES = 2
 
+// Build the best combos by maximizing joint win probability.
+// Pool must already be sorted in descending probability order by the caller.
+// Each player appears in at most MAX_PLAYER_APPEARANCES combos for variety.
 export function bestCombos(projections, legCount, limit = 5) {
   if (projections.length < legCount) return []
-  const maxGob = MAX_GOBLINS[legCount] ?? 2
   const pool = projections.slice(0, Math.min(30, projections.length))
 
   const scored = combinations(pool, legCount)
@@ -58,16 +50,10 @@ export function bestCombos(projections, legCount, limit = 5) {
       const ev          = calcEV(perLegAvg, legCount, goblinCount)
       return { picks, ev, jointProb, goblinCount }
     })
-    .filter(c => c.goblinCount <= maxGob)
-    // Cleanest slips first: fewest goblins, then highest quality standard picks.
-    // Goblin-heavy slips naturally fall to the end.
-    .sort((a, b) => a.goblinCount - b.goblinCount || cleanScore(b) - cleanScore(a))
+    .sort((a, b) => b.jointProb - a.jointProb)
 
-  // Greedy rotation: each player appears in at most MAX_PLAYER_APPEARANCES combos.
   const appearances = {}
   const result = []
-  let hasClean = false
-
   for (const combo of scored) {
     if (result.length >= limit) break
     const overLimit = combo.picks.some(
@@ -75,21 +61,9 @@ export function bestCombos(projections, legCount, limit = 5) {
     )
     if (overLimit) continue
     result.push(combo)
-    if (combo.goblinCount === 0) hasClean = true
     for (const p of combo.picks) {
       appearances[p.playerName] = (appearances[p.playerName] ?? 0) + 1
     }
   }
-
-  // Guarantee at least one clean slip (0 goblins) per type when one exists.
-  // If the rotation excluded all clean combos, find the best one and prepend it.
-  if (!hasClean) {
-    const bestClean = scored.find(c => c.goblinCount === 0)
-    if (bestClean) {
-      if (result.length >= limit) result.pop()
-      result.unshift(bestClean)
-    }
-  }
-
   return result
 }

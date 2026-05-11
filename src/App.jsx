@@ -12,14 +12,10 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 const LEAGUES = ['ALL', 'LOL', 'CSGO', 'VAL', 'DOTA2']
 
-// Sort projections by probability adjusted for player track record.
-// playerScores[name] is a 0-1 hit rate; defaults to 1 (no penalty) if unknown.
-function scoredSort(arr, playerScores) {
-  return [...arr].sort((a, b) => {
-    const sa = a.probability * (playerScores[a.playerName] ?? 1)
-    const sb = b.probability * (playerScores[b.playerName] ?? 1)
-    return sb - sa
-  })
+// Sort props by hit probability descending — goblins/locks with low thresholds
+// naturally rise to the top since they carry higher win probabilities.
+function scoredSort(arr) {
+  return [...arr].sort((a, b) => b.probability - a.probability)
 }
 
 export default function App() {
@@ -50,31 +46,29 @@ export default function App() {
     [adjustedProjections, league],
   )
 
+  // Table sorted purely by win probability — highest hit rate props first.
   const sorted = useMemo(
-    () => [...filtered].sort((a, b) => {
-      if (a.oddsType === 'goblin' && b.oddsType !== 'goblin') return 1
-      if (b.oddsType === 'goblin' && a.oddsType !== 'goblin') return -1
-      return b.probability - a.probability
-    }),
+    () => [...filtered].sort((a, b) => b.probability - a.probability),
     [filtered],
   )
 
-  // Slip pool uses adjusted probabilities + tracker history scores so both
-  // PandaScore L5 data and personal W/L record influence pick ranking.
+  // Slip pool sorted by probability. When a league filter is active, that
+  // league's props appear first; other leagues fill remaining slots.
   const slipPool = useMemo(() => {
-    if (league === 'ALL') {
-      return scoredSort(adjustedProjections, playerScores)
-    }
-    const primary = scoredSort(adjustedProjections.filter(p => p.league === league), playerScores)
-    const secondary = scoredSort(adjustedProjections.filter(p => p.league !== league), playerScores)
+    if (league === 'ALL') return scoredSort(adjustedProjections)
+    const primary   = scoredSort(adjustedProjections.filter(p => p.league === league))
+    const secondary = scoredSort(adjustedProjections.filter(p => p.league !== league))
     return [...primary, ...secondary]
-  }, [adjustedProjections, league, playerScores])
+  }, [adjustedProjections, league])
 
-  // Lottery pool: always all leagues, adjusted probabilities
+  // Lottery pool: all leagues sorted by probability.
   const lotteryPool = useMemo(
-    () => scoredSort(adjustedProjections, playerScores),
-    [adjustedProjections, playerScores],
+    () => scoredSort(adjustedProjections),
+    [adjustedProjections],
   )
+
+  // Top 6 picks by win probability — the highest-confidence individual props.
+  const topPicks = useMemo(() => slipPool.slice(0, 6), [slipPool])
 
   const combos2Raw     = useMemo(() => bestCombos(slipPool, 2, 3),       [slipPool])
   const combos3Raw     = useMemo(() => bestCombos(slipPool, 3, 3),       [slipPool])
@@ -191,8 +185,57 @@ export default function App() {
 
       <div style={{ padding: '16px' }}>
         <p style={{ margin: '0 0 14px', fontSize: 11, color: '#555', lineHeight: 1.5 }}>
-          Esports lines are mostly Goblin picks — negative EV is expected. Focus on highest probability picks.
+          Goblin lines detected — targeting highest hit rate props.
         </p>
+
+        {topPicks.length > 0 && (
+          <ErrorBoundary label="Top picks error">
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 10 }}>
+                TOP PICKS TODAY
+              </div>
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+                {topPicks.map(p => {
+                  const lock    = isLock(p.line, p.statType)
+                  const gobLine = !lock && isLineGoblin(p.line, p.league, p.statType)
+                  const ppGob   = !lock && !gobLine && p.oddsType === 'goblin'
+                  const demon   = p.oddsType === 'demon'
+                  const badge   = lock ? { label: 'LOCK',  bg: '#1d4ed822', color: '#60a5fa', border: '#1d4ed855' }
+                                : gobLine ? { label: 'GOBLIN', bg: '#16a34a22', color: '#16a34a', border: '#16a34a55' }
+                                : ppGob   ? { label: 'GOB',    bg: '#f59e0b22', color: '#f59e0b', border: '#f59e0b55' }
+                                : demon   ? { label: 'DEMON',  bg: '#6b21a822', color: '#a78bfa', border: '#6b21a855' }
+                                : null
+                  return (
+                    <div key={p.id} style={{
+                      background: '#1e1e1e', border: '1px solid #2a2a2a', borderRadius: 8,
+                      padding: '10px 14px', minWidth: 120, flexShrink: 0,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                        {badge && (
+                          <span style={{
+                            fontSize: 8, background: badge.bg, color: badge.color,
+                            border: `1px solid ${badge.border}`, borderRadius: 3,
+                            padding: '1px 4px', fontWeight: 700, letterSpacing: 0.3,
+                          }}>{badge.label}</span>
+                        )}
+                        <span style={{ fontSize: 9, color: '#555' }}>{p.league}</span>
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--cream)', marginBottom: 2 }}>
+                        {p.playerName}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#666', marginBottom: 6 }}>
+                        {p.statType} O{p.line}
+                      </div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: probColor(p.probability) }}>
+                        {fmtPct(p.probability)}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </ErrorBoundary>
+        )}
 
         {hasSlips && (
           <ErrorBoundary label="Slip cards error">
