@@ -23,17 +23,29 @@ function inLeague(p, selected) {
   return p.league === selected
 }
 
-// Typical kill averages per game/map-count used when no player stats are available.
-function typicalKillAvg(league, statType) {
+// Typical averages per esports game/stat/map-count used as fallback when no player
+// stats are available. MLB is excluded — it uses real stats only.
+function typicalAvg(league, statType) {
   const g  = (league || '').toUpperCase()
   const st = (statType || '').toLowerCase()
-  if (!st.includes('kill')) return null
+  if (g === 'MLB') return null
   const is12 = /1-2/i.test(st)
   const is13 = /1-3/i.test(st)
-  if (g === 'CS2' || g === 'CSGO') return is13 ? 42 : is12 ? 28 : 16
-  if (g === 'LOL')                  return is13 ? 14 : is12 ? 10 : 6
-  if (g === 'VAL')                  return is12 ? 32 : 18
-  if (g === 'DOTA2')                return 10
+  if (st.includes('kill')) {
+    if (g === 'CS2' || g === 'CSGO') return is13 ? 42 : is12 ? 28 : 16
+    if (g === 'LOL')                  return is13 ? 14 : is12 ? 10 : 6
+    if (g === 'VAL')                  return is12 ? 32 : 18
+    if (g === 'DOTA2')                return 10
+  }
+  if (st.includes('headshot')) {
+    if (g === 'CS2' || g === 'CSGO') return is12 ? 14 : 8
+  }
+  if (st.includes('last hit')) {
+    if (g === 'DOTA2') return 150
+  }
+  if (st === 'gpm' || st.includes('gold per min') || st.includes('gold/min')) {
+    if (g === 'DOTA2') return 450
+  }
   return null
 }
 
@@ -51,8 +63,8 @@ function resolveOverUnder(statLine, league, statType, line, currentProb) {
     }
   }
 
-  // No player stats — fall back to typical averages for kills props
-  const typical = typicalKillAvg(league, statType)
+  // No player stats — fall back to typical averages (esports only; MLB returns null)
+  const typical = typicalAvg(league, statType)
   if (typical == null) return { overUnder: 'OVER', probability: currentProb, sharp: false }
 
   const ratio = line / typical
@@ -121,6 +133,27 @@ export default function App() {
 
   const lotteryPool = useMemo(() => scoredSort(adjustedProjections), [adjustedProjections])
 
+  // Under pool: pre-resolve each prop and keep only UNDER recommendations.
+  // Probability is already direction-adjusted (P(UNDER hit) = 1-P(OVER)) so
+  // bestCombos ranks by true UNDER probability without double-adjustment.
+  const underPool = useMemo(() => {
+    const resolved = adjustedProjections.map(p => {
+      const sl = getStatLine(p.playerName, p.league, p.statType)
+      const { overUnder, probability, sharp } = resolveOverUnder(sl, p.league, p.statType, p.line, p.probability)
+      return { ...p, overUnder, probability, sharp }
+    })
+    return scoredSort(resolved.filter(p => p.overUnder === 'UNDER'))
+  }, [adjustedProjections, getStatLine])
+
+  const underRaw = useMemo(() => {
+    if (underPool.length < 2) return { u2: [], u3: [], u4: [] }
+    const appearances = {}
+    const u4 = bestCombos(underPool, 4, 3, appearances)
+    const u2 = bestCombos(underPool, 2, 3, appearances)
+    const u3 = bestCombos(underPool, 3, 3, appearances)
+    return { u2, u3, u4 }
+  }, [underPool])
+
   // Top Picks: standards first, then goblins, then locks.
   // Cap at 2 picks with the same statType+line to avoid 5×"MAPS 1-2 Kills O1.5".
   const topPicks = useMemo(() => {
@@ -186,7 +219,22 @@ export default function App() {
     [allRaw.lottery, getStatLine, playerHistory],
   )
 
-  const hasSlips = combos2.length > 0 || combos3.length > 0 || combos4.length > 0 || lotterySlip
+  // Under combos: picks already have overUnder/probability resolved — skip withOverUnder.
+  const underCombos2 = useMemo(
+    () => underRaw.u2.map(c => ({ ...c, confidence: calcConfidence(c, getStatLine, playerHistory) })),
+    [underRaw.u2, getStatLine, playerHistory],
+  )
+  const underCombos3 = useMemo(
+    () => underRaw.u3.map(c => ({ ...c, confidence: calcConfidence(c, getStatLine, playerHistory) })),
+    [underRaw.u3, getStatLine, playerHistory],
+  )
+  const underCombos4 = useMemo(
+    () => underRaw.u4.map(c => ({ ...c, confidence: calcConfidence(c, getStatLine, playerHistory) })),
+    [underRaw.u4, getStatLine, playerHistory],
+  )
+
+  const hasUnderSlips = underCombos2.length > 0 || underCombos3.length > 0 || underCombos4.length > 0
+  const hasSlips = combos2.length > 0 || combos3.length > 0 || combos4.length > 0 || lotterySlip || hasUnderSlips
 
   // Auto-save all generated slips once per session
   const autoSavedRef = useRef(false)
@@ -404,44 +452,86 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Two-column: left (2-leg + 3-leg), right (lottery) */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
-                  <div>
-                    {combos2.length > 0 && (
-                      <div style={{ marginBottom: 24 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>
-                          PRECISION 2-LEG
-                        </div>
-                        {combos2.map((c, i) => (
-                          <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
-                            onTrack={() => addSlip(c, 'Precision 2-Leg', league)} />
-                        ))}
-                      </div>
-                    )}
-                    {combos3.length > 0 && (
-                      <div>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>
-                          EDGE 3-LEG
-                        </div>
-                        {combos3.map((c, i) => (
-                          <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
-                            onTrack={() => addSlip(c, 'Edge 3-Leg', league)} />
-                        ))}
-                      </div>
-                    )}
+                {/* Two-column: Precision 2-Leg | Edge 3-Leg */}
+                {(combos2.length > 0 || combos3.length > 0) && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginBottom: 32 }}>
+                    <div>
+                      {combos2.length > 0 && (
+                        <>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>
+                            PRECISION 2-LEG
+                          </div>
+                          {combos2.map((c, i) => (
+                            <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
+                              onTrack={() => addSlip(c, 'Precision 2-Leg', league)} />
+                          ))}
+                        </>
+                      )}
+                    </div>
+                    <div>
+                      {combos3.length > 0 && (
+                        <>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>
+                            EDGE 3-LEG
+                          </div>
+                          {combos3.map((c, i) => (
+                            <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
+                              onTrack={() => addSlip(c, 'Edge 3-Leg', league)} />
+                          ))}
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    {lotterySlip && (
-                      <div>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', letterSpacing: 1, marginBottom: 8 }}>
-                          LOTTERY 6-LEG
-                        </div>
-                        <SlipCard combo={lotterySlip} rank={1} variant="lottery" confidence={lotterySlip.confidence}
-                          onTrack={() => addSlip(lotterySlip, 'Lottery 6-Leg', 'ALL')} />
-                      </div>
-                    )}
+                )}
+
+                {/* Under Parlay — UNDER-only props, placed between Edge 3-Leg and Lottery */}
+                {hasUnderSlips && (
+                  <div style={{
+                    marginBottom: 32,
+                    background: '#1a0a0a', border: '1px solid #ef444440',
+                    borderRadius: 10, padding: '16px 16px 12px',
+                  }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      fontSize: 13, fontWeight: 800, color: '#ef4444',
+                      letterSpacing: 1, marginBottom: 4,
+                    }}>
+                      ↓ UNDER PARLAY
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, color: '#888', background: '#2a1010',
+                        border: '1px solid #ef444433', borderRadius: 4, padding: '2px 6px', letterSpacing: 0.5,
+                      }}>FADE THE LINE</span>
+                    </div>
+                    <p style={{ margin: '0 0 14px', fontSize: 10, color: '#555', fontStyle: 'italic' }}>
+                      Props where the line sits above typical averages — bet the UNDER.
+                    </p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+                      {underCombos4.map((c, i) => (
+                        <SlipCard key={`u4-${i}`} combo={c} rank={i + 1} variant="core4" confidence={c.confidence}
+                          onTrack={() => addSlip(c, 'Under Parlay 4-Leg', league)} />
+                      ))}
+                      {underCombos3.map((c, i) => (
+                        <SlipCard key={`u3-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
+                          onTrack={() => addSlip(c, 'Under Parlay 3-Leg', league)} />
+                      ))}
+                      {underCombos2.map((c, i) => (
+                        <SlipCard key={`u2-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
+                          onTrack={() => addSlip(c, 'Under Parlay 2-Leg', league)} />
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* Lottery 6-Leg */}
+                {lotterySlip && (
+                  <div style={{ marginBottom: 32 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', letterSpacing: 1, marginBottom: 8 }}>
+                      LOTTERY 6-LEG
+                    </div>
+                    <SlipCard combo={lotterySlip} rank={1} variant="lottery" confidence={lotterySlip.confidence}
+                      onTrack={() => addSlip(lotterySlip, 'Lottery 6-Leg', 'ALL')} />
+                  </div>
+                )}
               </ErrorBoundary>
             )}
 
