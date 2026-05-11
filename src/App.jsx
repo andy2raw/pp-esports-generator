@@ -67,8 +67,20 @@ export default function App() {
     [adjustedProjections],
   )
 
-  // Top 6 picks by win probability — the highest-confidence individual props.
-  const topPicks = useMemo(() => slipPool.slice(0, 6), [slipPool])
+  // Top Picks: 2 LOCKs, then 2 best non-goblin standard props, then 2 best goblins.
+  const topPicks = useMemo(() => {
+    const locks     = slipPool.filter(p => isLock(p.line, p.statType)).slice(0, 2)
+    const standards = slipPool.filter(p =>
+      !isLock(p.line, p.statType) &&
+      !isLineGoblin(p.line, p.league, p.statType) &&
+      p.oddsType !== 'goblin',
+    ).slice(0, 2)
+    const goblins   = slipPool.filter(p =>
+      !isLock(p.line, p.statType) &&
+      (isLineGoblin(p.line, p.league, p.statType) || p.oddsType === 'goblin'),
+    ).slice(0, 2)
+    return [...locks, ...standards, ...goblins].slice(0, 6)
+  }, [slipPool])
 
   const combos2Raw     = useMemo(() => bestCombos(slipPool, 2, 3),       [slipPool])
   const combos3Raw     = useMemo(() => bestCombos(slipPool, 3, 3),       [slipPool])

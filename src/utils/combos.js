@@ -34,24 +34,10 @@ function correlationFactor(picks) {
 
 const MAX_PLAYER_APPEARANCES = 2
 
-// Build the best combos by maximizing joint win probability.
-// Pool must already be sorted in descending probability order by the caller.
-// Each player appears in at most MAX_PLAYER_APPEARANCES combos for variety.
-export function bestCombos(projections, legCount, limit = 5) {
-  if (projections.length < legCount) return []
-  const pool = projections.slice(0, Math.min(30, projections.length))
+// Max goblins (oddsType === 'goblin') per slip — at most 50% of legs.
+const MAX_GOBLINS = { 2: 1, 3: 1, 4: 2, 5: 2, 6: 3 }
 
-  const scored = combinations(pool, legCount)
-    .filter(isValidSlip)
-    .map(picks => {
-      const goblinCount = picks.filter(p => p.oddsType === 'goblin').length
-      const jointProb   = picks.reduce((acc, p) => acc * p.probability, 1) * correlationFactor(picks)
-      const perLegAvg   = Math.pow(jointProb, 1 / legCount)
-      const ev          = calcEV(perLegAvg, legCount, goblinCount)
-      return { picks, ev, jointProb, goblinCount }
-    })
-    .sort((a, b) => b.jointProb - a.jointProb)
-
+function pickResult(scored, limit) {
   const appearances = {}
   const result = []
   for (const combo of scored) {
@@ -66,4 +52,33 @@ export function bestCombos(projections, legCount, limit = 5) {
     }
   }
   return result
+}
+
+// Build the best combos by maximizing joint win probability.
+// Pool must already be sorted in descending probability order by the caller.
+// Each player appears in at most MAX_PLAYER_APPEARANCES combos for variety.
+// Each slip has at most MAX_GOBLINS[legCount] goblin props; falls back to
+// unconstrained selection when there aren't enough diverse props to fill the limit.
+export function bestCombos(projections, legCount, limit = 5) {
+  if (projections.length < legCount) return []
+  const pool = projections.slice(0, Math.min(30, projections.length))
+  const maxGob = MAX_GOBLINS[legCount] ?? Math.floor(legCount / 2)
+
+  const scored = combinations(pool, legCount)
+    .filter(isValidSlip)
+    .map(picks => {
+      const goblinCount = picks.filter(p => p.oddsType === 'goblin').length
+      const jointProb   = picks.reduce((acc, p) => acc * p.probability, 1) * correlationFactor(picks)
+      const perLegAvg   = Math.pow(jointProb, 1 / legCount)
+      const ev          = calcEV(perLegAvg, legCount, goblinCount)
+      return { picks, ev, jointProb, goblinCount }
+    })
+    .sort((a, b) => b.jointProb - a.jointProb)
+
+  const diverse = scored.filter(c => c.goblinCount <= maxGob)
+  const result = pickResult(diverse, limit)
+  // Fall back to unconstrained if diversity filter leaves fewer than requested.
+  if (result.length >= limit) return result
+  const fallback = pickResult(scored, limit)
+  return fallback.length > result.length ? fallback : result
 }
