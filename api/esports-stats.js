@@ -90,6 +90,19 @@ async function psGet(path) {
 
 function avg(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null }
 
+// Normalize PrizePicks stat type names to canonical keys used in field maps.
+// PrizePicks sends e.g. "MAPS 1-2 Kills" — strip prefixes and map to base type.
+function normalizeStatType(statType) {
+  const st = (statType || '').toLowerCase()
+  if (st.includes('kill'))     return 'Kills'
+  if (st.includes('death'))    return 'Deaths'
+  if (st.includes('assist'))   return 'Assists'
+  if (st.includes('headshot')) return 'Headshots'
+  if (st.includes(' cs') || st === 'cs' || st.includes('creep')) return 'CS'
+  if (st.includes('gold'))     return 'Gold Earned'
+  return statType
+}
+
 // ── Probability calculation ───────────────────────────────────────────────────
 // Per-map kill averages used when no player stats are available.
 // Multi-map (Maps 1-2) averages are provided separately.
@@ -131,6 +144,7 @@ function finalizeProb(name, game, statType, line, data) {
   // LOL kills: Support/Jungle players get 0.75× multiplier (fewer kills by design).
   if ((game || '').toUpperCase() === 'LOL' && (statType || '').toLowerCase().includes('kill')) {
     const role = (data.role || '').toLowerCase()
+    console.log(`[role] "${name}" → ${data.role ?? 'null'}`)
     if (role && (role.includes('sup') || role.includes('jng') ||
                  role.includes('support') || role.includes('jungle'))) {
       const before = probability
@@ -292,14 +306,39 @@ const LOL_FIELD_MAP = {
   'Gold Earned': 'Gold',
 }
 
-async function getLolStats(name, statType) {
-  // 1) Try PandaScore /lol/players
-  const ps = await getPandaScoreStats('lol', name, statType)
-  if (ps) return ps
+// Hardcoded role table — used when Leaguepedia/PandaScore don't return a role.
+// Supports and low-kill ADCs get the 0.75× kills multiplier in finalizeProb.
+const LOL_ROLE_TABLE = {
+  // Supports
+  kellin: 'sup', meiko: 'sup', career: 'sup', keria: 'sup', lehends: 'sup',
+  beryl: 'sup', effort: 'sup', vsta: 'sup', biofrost: 'sup', corejj: 'sup',
+  vulcan: 'sup', chime: 'sup', olleh: 'sup', zeyzal: 'sup',
+  // Low-kill ADC — also gets multiplier
+  ruler: 'sup',
+  // Jungles
+  peanut: 'jng', canyon: 'jng', oner: 'jng', clearlove: 'jng',
+  karsa: 'jng', jankos: 'jng', inspired: 'jng', blaber: 'jng',
+  santorin: 'jng', broxah: 'jng', jojo: 'jng', bugi: 'jng',
+  winsome: 'jng', erek: 'jng',
+}
 
-  // 2) Fallback: Leaguepedia Cargo API
-  const field = LOL_FIELD_MAP[statType]
-  if (!field) return null
+async function getLolStats(name, statType) {
+  const normalStat = normalizeStatType(statType)
+
+  // 1) Try PandaScore /lol/players (normalized stat type)
+  const ps = await getPandaScoreStats('lol', name, normalStat)
+  if (ps) {
+    const role = LOL_ROLE_TABLE[name.toLowerCase()] ?? null
+    console.log(`[role] "${name}" → ${role ?? 'null'} (hardcoded, PS hit)`)
+    return { ...ps, role }
+  }
+
+  // 2) Fallback: Leaguepedia Cargo API (normalized stat type)
+  const field = LOL_FIELD_MAP[normalStat]
+  if (!field) {
+    console.log(`[lol] "${name}" normalStat="${normalStat}" not in LOL_FIELD_MAP, skipping`)
+    return null
+  }
 
   const variants = [...new Set([
     name,
@@ -324,11 +363,17 @@ async function getLolStats(name, statType) {
     const values = rows.map(r => parseFloat(r.title?.[field])).filter(v2 => !isNaN(v2) && v2 >= 0)
     if (!values.length) continue
 
-    const role = rows[0]?.title?.Role || null
-    console.log(`[lol] "${name}" role=${role} from leaguepedia`)
+    // Role: prefer Leaguepedia, fall back to hardcoded table
+    const lpRole = rows[0]?.title?.Role || null
+    const role   = lpRole ?? LOL_ROLE_TABLE[name.toLowerCase()] ?? null
+    console.log(`[role] "${name}" → ${role ?? 'null'} (leaguepedia=${lpRole ?? 'null'})`)
     return { last5Avg: avg(values.slice(0, 5)), seasonAvg: avg(values), source: 'leaguepedia', role }
   }
-  return null
+
+  // 3) Neither source returned stats — still record role for heuristic path
+  const role = LOL_ROLE_TABLE[name.toLowerCase()] ?? null
+  console.log(`[role] "${name}" → ${role ?? 'null'} (hardcoded, stats miss)`)
+  return role ? { seasonAvg: null, last5Avg: null, source: null, role } : null
 }
 
 // ── DOTA2 — OpenDota API — UNCHANGED ─────────────────────────────────────────

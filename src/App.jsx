@@ -70,12 +70,25 @@ export default function App() {
 
   const lotteryPool = useMemo(() => scoredSort(adjustedProjections), [adjustedProjections])
 
-  // Top Picks: 3 best standards, 2 goblins, 1 lock
+  // Top Picks: standards first, then goblins, then locks.
+  // Cap at 2 picks with the same statType+line to avoid 5×"MAPS 1-2 Kills O1.5".
   const topPicks = useMemo(() => {
-    const standards = slipPool.filter(p => !isLock(p.line, p.statType) && !isGoblin(p)).slice(0, 3)
-    const goblins   = slipPool.filter(p => !isLock(p.line, p.statType) && isGoblin(p)).slice(0, 2)
-    const locks     = slipPool.filter(p => isLock(p.line, p.statType)).slice(0, 1)
-    return [...standards, ...goblins, ...locks].slice(0, 6)
+    const candidates = [
+      ...slipPool.filter(p => !isLock(p.line, p.statType) && !isGoblin(p)),
+      ...slipPool.filter(p => !isLock(p.line, p.statType) && isGoblin(p)),
+      ...slipPool.filter(p => isLock(p.line, p.statType)),
+    ]
+    const statLineCounts = {}
+    const result = []
+    for (const p of candidates) {
+      if (result.length >= 6) break
+      const key = `${p.statType}|${p.line}`
+      const count = statLineCounts[key] || 0
+      if (count >= 2) continue
+      statLineCounts[key] = count + 1
+      result.push(p)
+    }
+    return result
   }, [slipPool])
 
   // ── Build all combos with a single shared appearances dict so no player
