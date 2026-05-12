@@ -206,6 +206,21 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack }) 
                     borderRadius: 3, padding: '1px 4px',
                   }}>{p.overUnder}</span>
                 )}
+                {/* Market line comparison — shows when Odds API data is available */}
+                {p.sharpValue && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 700,
+                    background: '#22c55e14', color: '#22c55e',
+                    border: '1px solid #22c55e40', borderRadius: 3, padding: '1px 4px',
+                  }}>SHARP VALUE</span>
+                )}
+                {p.marketLines && (
+                  <span style={{ fontSize: 8, color: p.sharpValue ? '#22c55e99' : '#555', letterSpacing: 0.2 }}>
+                    PP O{p.line}
+                    {p.marketLines.dk != null && ` · DK O${p.marketLines.dk}`}
+                    {p.marketLines.fd != null && ` · FD O${p.marketLines.fd}`}
+                  </span>
+                )}
               </div>
               <span style={{
                 fontSize: 11, fontWeight: 700, flexShrink: 0, marginLeft: 8, minWidth: 52, textAlign: 'right',

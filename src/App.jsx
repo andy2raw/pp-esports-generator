@@ -10,6 +10,7 @@ import SlipTracker from './components/SlipTracker.jsx'
 import DailyQuote from './components/DailyQuote.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import LadderChallenge from './components/LadderChallenge.jsx'
+import { useOdds } from './hooks/useOdds.js'
 
 const LEAGUES = ['ALL', 'LOL', 'CSGO', 'VAL', 'DOTA2', 'MLB']
 
@@ -103,6 +104,7 @@ export default function App() {
 
   const { projections, loading, error, lastRefresh, countdown, refresh } = usePrizePicks()
   const { getStatLine, getCalcProb, psLoading } = usePandaScore(projections)
+  const { getMarketLines } = useOdds()
   const {
     trackedSlips, addSlip, setResult, setMissedLeg, removeSlip,
     playerHistory, wins, losses, pnl, winRate, settled, pending,
@@ -118,9 +120,28 @@ export default function App() {
     [projections, getCalcProb],
   )
 
+  // Attach market line data from The Odds API (MLB only in practice).
+  // sharpValue = true when PP line is softer (easier to hit) than market consensus.
+  const enrichedProjections = useMemo(() =>
+    adjustedProjections.map(p => {
+      const ml = getMarketLines(p.playerName, p.statType)
+      if (!ml) return p
+      const consensus = ml.dk != null && ml.fd != null
+        ? (ml.dk + ml.fd) / 2
+        : (ml.dk ?? ml.fd)
+      const isUnder   = p.overUnder === 'UNDER'
+      // OVER: PP line below consensus = easier to go over → sharp value
+      // UNDER: PP line above consensus = easier to go under → sharp value
+      const sharpValue = consensus != null &&
+        (isUnder ? p.line > consensus : p.line < consensus)
+      return { ...p, marketLines: ml, sharpValue: sharpValue || undefined }
+    }),
+    [adjustedProjections, getMarketLines],
+  )
+
   const filtered = useMemo(
-    () => league === 'ALL' ? adjustedProjections : adjustedProjections.filter(p => inLeague(p, league)),
-    [adjustedProjections, league],
+    () => league === 'ALL' ? enrichedProjections : enrichedProjections.filter(p => inLeague(p, league)),
+    [enrichedProjections, league],
   )
 
   const sorted = useMemo(
@@ -130,8 +151,8 @@ export default function App() {
 
   // Esports-only projections — MLB and other sports are excluded from slip generation.
   const esportsProjections = useMemo(
-    () => adjustedProjections.filter(p => ESPORTS_LEAGUES.has(p.league)),
-    [adjustedProjections],
+    () => enrichedProjections.filter(p => ESPORTS_LEAGUES.has(p.league)),
+    [enrichedProjections],
   )
 
   // Pre-resolve OVER/UNDER for every esports prop so bestCombos scores by
@@ -204,13 +225,14 @@ export default function App() {
     return { u2, u3, u4 }
   }, [underPool])
 
-  // Top Picks: standards first, then goblins, then locks.
+  // Top Picks: SHARP VALUE first, then standards, then goblins, then locks.
   // Cap at 2 picks with the same statType+line to avoid 5×"MAPS 1-2 Kills O1.5".
   const topPicks = useMemo(() => {
     const candidates = [
-      ...slipPool.filter(p => !isLock(p.line, p.statType) && !isGoblin(p)),
-      ...slipPool.filter(p => !isLock(p.line, p.statType) && isGoblin(p)),
-      ...slipPool.filter(p => isLock(p.line, p.statType)),
+      ...slipPool.filter(p => p.sharpValue),
+      ...slipPool.filter(p => !p.sharpValue && !isLock(p.line, p.statType) && !isGoblin(p)),
+      ...slipPool.filter(p => !p.sharpValue && !isLock(p.line, p.statType) && isGoblin(p)),
+      ...slipPool.filter(p => !p.sharpValue && isLock(p.line, p.statType)),
     ]
     const statLineCounts = {}
     const result = []
@@ -439,7 +461,14 @@ export default function App() {
                                 padding: '1px 4px', fontWeight: 700, letterSpacing: 0.3,
                               }}>{badge.label}</span>
                             )}
-                            {isSharp && (
+                            {p.sharpValue && (
+                              <span style={{
+                                fontSize: 8, fontWeight: 700,
+                                background: '#22c55e14', color: '#22c55e',
+                                border: '1px solid #22c55e40', borderRadius: 3, padding: '1px 4px',
+                              }}>SHARP VALUE</span>
+                            )}
+                            {!p.sharpValue && isSharp && (
                               <span style={{
                                 fontSize: 8, fontWeight: 700,
                                 background: '#eab30814', color: '#eab308',
@@ -462,8 +491,15 @@ export default function App() {
                             {p.statType} O{p.line}
                           </div>
                           {avgLabel && (
-                            <div style={{ fontSize: 9, color: '#888', marginBottom: 6 }}>
+                            <div style={{ fontSize: 9, color: '#888', marginBottom: 2 }}>
                               {avgLabel} · Line: O{p.line}
+                            </div>
+                          )}
+                          {p.marketLines && (
+                            <div style={{ fontSize: 9, color: p.sharpValue ? '#22c55e' : '#666', marginBottom: 6, fontWeight: p.sharpValue ? 700 : 400 }}>
+                              PP: O{p.line}
+                              {p.marketLines.dk != null && ` · DK: O${p.marketLines.dk}`}
+                              {p.marketLines.fd != null && ` · FD: O${p.marketLines.fd}`}
                             </div>
                           )}
                           <div style={{ fontSize: 20, fontWeight: 800, color: probColor(displayProb) }}>
@@ -706,7 +742,14 @@ export default function App() {
                               }}>
                                 {overUnder}
                               </span>
-                              {propSharp && (
+                              {p.sharpValue && (
+                                <span style={{
+                                  marginLeft: 4, fontSize: 9, fontWeight: 700,
+                                  background: '#22c55e14', color: '#22c55e',
+                                  border: '1px solid #22c55e40', borderRadius: 3, padding: '2px 4px',
+                                }}>SHARP VALUE</span>
+                              )}
+                              {!p.sharpValue && propSharp && (
                                 <span style={{
                                   marginLeft: 4, fontSize: 9, fontWeight: 700,
                                   background: '#eab30814', color: '#eab308',
@@ -720,6 +763,13 @@ export default function App() {
                               ) : psLoading ? (
                                 <span style={{ color: '#444', fontSize: 10 }}>…</span>
                               ) : null}
+                              {p.marketLines && (
+                                <div style={{ fontSize: 9, color: p.sharpValue ? '#22c55e' : '#666', marginTop: sl ? 4 : 0, fontWeight: p.sharpValue ? 700 : 400, whiteSpace: 'nowrap' }}>
+                                  PP&nbsp;O{p.line}
+                                  {p.marketLines.dk != null && <> · DK&nbsp;O{p.marketLines.dk}</>}
+                                  {p.marketLines.fd != null && <> · FD&nbsp;O{p.marketLines.fd}</>}
+                                </div>
+                              )}
                             </td>
                             <td style={{ padding: '9px 10px', fontWeight: 700, color: probColor(displayProb) }}>
                               {fmtPct(displayProb)}
