@@ -49,28 +49,14 @@ async function searchPlayer(name) {
 }
 
 function calcProb(line, l5Avg, seasonAvg) {
-  if (!line || line <= 0) return 0.54
-  const l5 = l5Avg
-  const szn = seasonAvg
-  if (l5 == null && szn == null) return 0.54
-
-  const l5Above  = l5 != null && l5 > line
-  const sznAbove = szn != null && szn > line
-
-  if (l5Above && sznAbove) {
-    const avgEx = ((l5 / line - 1) + (szn / line - 1)) / 2
-    return Math.min(0.78, 0.68 + Math.min(avgEx / 0.30, 1) * 0.10)
-  } else if (l5Above) {
-    const ex = l5 / line - 1
-    return Math.min(0.72, 0.63 + Math.min(ex / 0.30, 1) * 0.09)
-  } else if (sznAbove) {
-    const ex = szn / line - 1
-    return Math.min(0.68, 0.58 + Math.min(ex / 0.30, 1) * 0.10)
-  } else {
-    const best = Math.max(l5 ?? 0, szn ?? 0)
-    const bf = line > 0 ? Math.min(1, 1 - best / line) : 0
-    return Math.max(0.46, 0.54 - bf * 0.20)
-  }
+  if (!line || line <= 0) return { prob: 0.54, sharp: false }
+  if (l5Avg == null && seasonAvg == null) return { prob: 0.54, sharp: false }
+  const ref = (l5Avg != null && seasonAvg != null)
+    ? l5Avg * 0.6 + seasonAvg * 0.4
+    : (l5Avg ?? seasonAvg)
+  const ratio = ref / line
+  const raw = 0.50 + (ratio - 1) * 0.28
+  return { prob: Math.max(0.35, Math.min(0.92, raw)), sharp: ratio >= 2.0 }
 }
 
 export default async function handler(req, res) {
@@ -83,7 +69,8 @@ export default async function handler(req, res) {
   const cacheKey = `${name}:${statType}`
   const hit = cache.get(cacheKey)
   if (hit && Date.now() - hit.ts < CACHE_TTL) {
-    return res.json({ ...hit.data, probability: calcProb(line, hit.data.last5Avg, hit.data.seasonAvg) })
+    const { prob, sharp } = calcProb(line, hit.data.last5Avg, hit.data.seasonAvg)
+    return res.json({ ...hit.data, probability: prob, sharp })
   }
 
   const statDef = MLB_STAT_MAP[statType]
@@ -126,5 +113,6 @@ export default async function handler(req, res) {
   )
 
   cache.set(cacheKey, { data: result, ts: Date.now() })
-  return res.json({ ...result, probability: calcProb(line, last5Avg, seasonAvg) })
+  const { prob, sharp } = calcProb(line, last5Avg, seasonAvg)
+  return res.json({ ...result, probability: prob, sharp })
 }

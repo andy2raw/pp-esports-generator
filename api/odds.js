@@ -46,7 +46,13 @@ const MARKET_TO_STAT = {
 }
 
 function normName(n) {
-  return (n || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim()
+  return (n || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 async function safeFetch(url, label) {

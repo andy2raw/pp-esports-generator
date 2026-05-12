@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 
 function normName(n) {
-  return (n || '').toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim()
+  return (n || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export function useOdds() {
