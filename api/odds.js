@@ -1,10 +1,6 @@
 // Fetches MLB player prop lines from The Odds API (DraftKings + FanDuel).
 // Returns { lines: { "normname::StatType": { dk, fd } }, updatedAt, debug }
-// Cached server-side for 60 minutes to preserve API quota.
-
-const CACHE_TTL_MS = 60 * 1000  // 1 min during debugging
-
-let cache = { ts: 0, data: null }
+// NOTE: caching disabled for debugging — every request hits the API fresh.
 
 // Validated market keys from The Odds API for baseball_mlb player props.
 // batter_stolen_bases is NOT a valid key and causes 422 — removed.
@@ -62,23 +58,7 @@ async function safeFetch(url, label) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Cache-Control', 'public, max-age=60')
-
-  // Invalidate cache if it captured a bad state (missing key or empty lines).
-  if (cache.data) {
-    const stale = cache.data.debug?.includes('missing') ||
-                  Object.keys(cache.data.lines ?? {}).length === 0
-    if (stale) {
-      console.log('[odds] invalidating stale/empty cache, debug was:', cache.data.debug)
-      cache = { ts: 0, data: null }
-    }
-  }
-
-  // Serve cache while still valid
-  if (Date.now() - cache.ts < CACHE_TTL_MS && cache.data) {
-    console.log('[odds] serving cached data, entries:', Object.keys(cache.data.lines).length)
-    return res.json(cache.data)
-  }
+  res.setHeader('Cache-Control', 'no-store')
 
   const apiKey = process.env.VITE_ODDS_API_KEY
   if (!apiKey) {
@@ -137,9 +117,7 @@ export default async function handler(req, res) {
     debug.push(`events:${events.length}`)
 
     if (events.length === 0) {
-      const result = { lines: {}, updatedAt: new Date().toISOString(), debug: 'no_events_today' }
-      cache = { ts: Date.now(), data: result }
-      return res.json(result)
+      return res.json({ lines: {}, updatedAt: new Date().toISOString(), debug: 'no_events_today' })
     }
 
     // ── Step 3: Player props per event ───────────────────────────────────────
@@ -201,12 +179,9 @@ export default async function handler(req, res) {
     const sample = Object.entries(lines).slice(0, 3).map(([k, v]) => `${k}→${JSON.stringify(v)}`)
     if (sample.length) console.log('[odds] sample entries:', sample.join(' | '))
 
-    const result = { lines, updatedAt: new Date().toISOString(), debug: debug.join(',') }
-    cache = { ts: Date.now(), data: result }
-    return res.json(result)
+    return res.json({ lines, updatedAt: new Date().toISOString(), debug: debug.join(',') })
   } catch (e) {
     console.error('[odds] unhandled error:', e.message)
-    if (cache.data) return res.json(cache.data)
     return res.json({ lines: {}, updatedAt: new Date().toISOString(), debug: `error:${e.message}` })
   }
 }
