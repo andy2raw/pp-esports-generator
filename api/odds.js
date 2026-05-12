@@ -55,6 +55,16 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Cache-Control', 'public, max-age=3600')
 
+  // Invalidate cache if it captured a bad state (missing key or empty lines).
+  if (cache.data) {
+    const stale = cache.data.debug?.includes('missing') ||
+                  Object.keys(cache.data.lines ?? {}).length === 0
+    if (stale) {
+      console.log('[odds] invalidating stale/empty cache, debug was:', cache.data.debug)
+      cache = { ts: 0, data: null }
+    }
+  }
+
   // Serve cache while still valid
   if (Date.now() - cache.ts < CACHE_TTL_MS && cache.data) {
     console.log('[odds] serving cached data, entries:', Object.keys(cache.data.lines).length)
