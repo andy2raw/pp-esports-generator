@@ -61,7 +61,7 @@ export function useLadder() {
   const currentStreak = useMemo(() => {
     let streak = 0
     for (let i = settled.length - 1; i >= 0; i--) {
-      if (settled[i].result === 'Skip') continue  // skips don't break a streak
+      if (settled[i].result === 'Skip' || settled[i].result === 'Push') continue
       if (settled[i].result === 'Win') streak++
       else break
     }
@@ -71,7 +71,7 @@ export function useLadder() {
   const bestStreak = useMemo(() => {
     let best = 0, run = 0
     for (const e of settled) {
-      if (e.result === 'Skip') continue
+      if (e.result === 'Skip' || e.result === 'Push') continue
       run = e.result === 'Win' ? run + 1 : 0
       best = Math.max(best, run)
     }

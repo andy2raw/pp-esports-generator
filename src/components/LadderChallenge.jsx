@@ -300,7 +300,9 @@ export default function LadderChallenge({ todaySlips = [] }) {
                 <span style={{ fontSize: 10, color: '#888' }}>{p.statType} O{p.line}</span>
               </div>
             ))}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
+            {/* NOTE: 'Push' result requires the ladder table result column to accept 'Push'.
+                Add it to your check constraint in the Supabase dashboard if needed. */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 12 }}>
               <button
                 onClick={() => recordResult(pendingEntry.id, 'Win')}
                 style={{
@@ -318,6 +320,15 @@ export default function LadderChallenge({ todaySlips = [] }) {
                 }}
               >
                 ✗ LOSS
+              </button>
+              <button
+                onClick={() => recordResult(pendingEntry.id, 'Push')}
+                style={{
+                  padding: '12px 0', background: '#eab30814', border: '1px solid #eab30840',
+                  color: '#eab308', borderRadius: 8, fontSize: 14, fontWeight: 800, cursor: 'pointer',
+                }}
+              >
+                ↔ PUSH
               </button>
             </div>
           </>
@@ -357,7 +368,7 @@ export default function LadderChallenge({ todaySlips = [] }) {
               </span>
               <span style={{
                 fontSize: 11, fontWeight: 700,
-                color: e.result === 'Win' ? '#22c55e' : '#ef4444',
+                color: e.result === 'Win' ? '#22c55e' : e.result === 'Push' ? '#eab308' : '#ef4444',
               }}>{e.result}</span>
               <span style={{ fontSize: 11, color: '#888' }}>${e.bankroll.toFixed(2)}</span>
             </div>

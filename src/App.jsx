@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { usePrizePicks } from './hooks/usePrizePicks.js'
 import { usePandaScore } from './hooks/usePandaScore.js'
 import { useSlipTracker } from './hooks/useSlipTracker.js'
@@ -11,6 +11,7 @@ import DailyQuote from './components/DailyQuote.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import LadderChallenge from './components/LadderChallenge.jsx'
 import { useOdds } from './hooks/useOdds.js'
+import ResultsPage from './components/ResultsPage.jsx'
 
 const LEAGUES = ['ALL', 'LOL', 'CSGO', 'VAL', 'DOTA2', 'MLB']
 
@@ -323,29 +324,27 @@ export default function App() {
     [underRaw.u4, getStatLine, playerHistory],
   )
 
-  const hasUnderSlips = underCombos2.length > 0 || underCombos3.length > 0 || underCombos4.length > 0
-  const hasSlips = combos2.length > 0 || combos3.length > 0 || combos4.length > 0 || lotterySlip || hasUnderSlips
-
-  // Auto-save all generated slips once per session
-  const autoSavedRef = useRef(false)
-  useEffect(() => {
-    if (autoSavedRef.current) return
-    if (supabaseLoading) return
-    if (!combos2.length && !combos3.length && !combos4.length && !lotterySlip) return
-
-    autoSavedRef.current = true
-    const existingIds = new Set(trackedSlips.map(s => s.id))
-
-    function maybeAdd(combo, slipType, leagueArg) {
-      const key = `${slipType}|${combo.picks.length}|${Number(combo.ev).toFixed(8)}|${Number(combo.jointProb).toFixed(8)}`
-      if (!existingIds.has(key)) addSlip(combo, slipType, leagueArg)
+  const under6Raw = useMemo(() => {
+    const byFade = [...underPool].sort((a, b) => (b.fadeStrength ?? 0) - (a.fadeStrength ?? 0))
+    if (byFade.length < 6) return []
+    const combos = []
+    for (let i = 0; i + 5 < byFade.length && combos.length < 3; i += 6) {
+      const picks = byFade.slice(i, i + 6)
+      const jointProb = picks.reduce((acc, p) => acc * p.probability, 1)
+      const ev = calcEV(Math.pow(jointProb, 1 / 6), 6, 0)
+      combos.push({ picks, ev, jointProb, goblinCount: 0 })
     }
+    return combos
+  }, [underPool])
 
-    combos2.forEach(c => maybeAdd(c, 'Precision 2-Leg', league))
-    combos3.forEach(c => maybeAdd(c, 'Edge 3-Leg', league))
-    combos4.forEach(c => maybeAdd(c, 'Core 4-Leg', league))
-    if (lotterySlip) maybeAdd(lotterySlip, 'Lottery 6-Leg', 'ALL')
-  }, [supabaseLoading, combos2, combos3, combos4, lotterySlip, trackedSlips, addSlip, league])
+  const underCombos6 = useMemo(
+    () => under6Raw.map(c => ({ ...c, confidence: calcConfidence(c, getStatLine, playerHistory) })),
+    [under6Raw, getStatLine, playerHistory],
+  )
+
+  const hasUnderSlips = underCombos2.length > 0 || underCombos3.length > 0 || underCombos4.length > 0
+  const hasSlips = combos2.length > 0 || combos3.length > 0 || combos4.length > 0 || lotterySlip || hasUnderSlips || underCombos6.length > 0
+
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--cream)', fontFamily: 'system-ui, sans-serif' }}>
@@ -385,7 +384,7 @@ export default function App() {
         background: '#181818', borderBottom: '1px solid #2a2a2a',
         display: 'flex', gap: 0,
       }}>
-        {[{ id: 'slips', label: 'Slips' }, { id: 'ladder', label: '★ Ladder' }].map(tab => (
+        {[{ id: 'slips', label: 'Slips' }, { id: 'results', label: 'Results' }, { id: 'ladder', label: '★ Ladder' }].map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -404,6 +403,14 @@ export default function App() {
       {/* ── Ladder tab ── */}
       {activeTab === 'ladder' && (
         <LadderChallenge todaySlips={combos2} />
+      )}
+
+      {/* ── Results tab ── */}
+      {activeTab === 'results' && (
+        <ResultsPage
+          trackedSlips={trackedSlips}
+          setResult={setResult}
+        />
       )}
 
       {/* ── Slips tab ── */}
@@ -678,6 +685,36 @@ export default function App() {
                   </div>
                 )}
 
+                {/* Unders 6-Leg — esports only, sorted by fade strength */}
+                {underCombos6.length > 0 && (
+                  <div style={{
+                    marginBottom: 32,
+                    background: '#100a1a', border: '1px solid #7c3aed40',
+                    borderRadius: 10, padding: '16px 16px 12px',
+                  }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      fontSize: 13, fontWeight: 800, color: '#a78bfa',
+                      letterSpacing: 1, marginBottom: 4,
+                    }}>
+                      ↓ UNDERS 6-LEG
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, color: '#888', background: '#1a1025',
+                        border: '1px solid #7c3aed33', borderRadius: 4, padding: '2px 6px', letterSpacing: 0.5,
+                      }}>FADE</span>
+                    </div>
+                    <p style={{ margin: '0 0 16px', fontSize: 10, color: '#555', fontStyle: 'italic' }}>
+                      Esports props with highest fade strength — lines furthest above typical avg, sorted by fade %.
+                    </p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
+                      {underCombos6.map((c, i) => (
+                        <SlipCard key={`u6-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
+                          onTrack={() => addSlip(c, 'Unders 6-Leg', league)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Lottery 6-Leg */}
                 {lotterySlip && (
                   <div style={{ marginBottom: 32 }}>
@@ -693,8 +730,11 @@ export default function App() {
 
             {/* ── All Projections table ── */}
             <ErrorBoundary label="Projections table error">
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 10, marginTop: 32 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 4, marginTop: 32 }}>
                 ALL PROJECTIONS
+              </div>
+              <div style={{ fontSize: 10, color: '#444', marginBottom: 10 }}>
+                Showing top {Math.min(50, sorted.length)} of {sorted.length} props
               </div>
               {loading && !projections.length ? (
                 <div style={{ color: '#555', fontSize: 13, padding: '40px 0', textAlign: 'center' }}>Loading...</div>
@@ -717,7 +757,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {sorted.map(p => {
+                      {sorted.slice(0, 50).map(p => {
                         const ppGoblin = p.oddsType === 'goblin'
                         const goblinDisplay = isGoblin(p)
                         const sl = getStatLine(p.playerName, p.league, p.statType)

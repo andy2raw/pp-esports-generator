@@ -174,6 +174,7 @@ export function useSlipTracker() {
     trackedSlips
       .filter(s => s.result !== 'Pending')
       .reduce((sum, s) => {
+        if (s.result === 'Push') return sum
         const mult = getEffectiveMult(s.legCount, s.goblinCount)
         return s.result === 'Win' ? sum + STAKE * mult - STAKE : sum - STAKE
       }, 0),
