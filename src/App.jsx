@@ -185,10 +185,22 @@ export default function App() {
 
   const underRaw = useMemo(() => {
     if (underPool.length < 2) return { u2: [], u3: [], u4: [] }
-    const appearances = {}
-    const u4 = bestCombos(underPool, 4, 3, appearances)
-    const u2 = bestCombos(underPool, 2, 3, appearances)
-    const u3 = bestCombos(underPool, 3, 3, appearances)
+    function makeCombo(picks) {
+      const jointProb = picks.reduce((acc, p) => acc * p.probability, 1)
+      const ev = calcEV(Math.pow(jointProb, 1 / picks.length), picks.length, 0)
+      return { picks, ev, jointProb, goblinCount: 0 }
+    }
+    const top = underPool.slice(0, 12)
+    const u2 = []
+    for (let i = 0; i + 1 < top.length && u2.length < 3; i += 2)
+      u2.push(makeCombo([top[i], top[i + 1]]))
+    const u3 = []
+    for (let i = 0; i + 2 < top.length && u3.length < 3; i += 3)
+      u3.push(makeCombo([top[i], top[i + 1], top[i + 2]]))
+    const u4 = []
+    for (let i = 0; i + 3 < top.length && u4.length < 3; i += 4)
+      u4.push(makeCombo([top[i], top[i + 1], top[i + 2], top[i + 3]]))
+    console.log('[underRaw] pool:', underPool.length, 'u2:', u2.length, 'u3:', u3.length, 'u4:', u4.length)
     return { u2, u3, u4 }
   }, [underPool])
 

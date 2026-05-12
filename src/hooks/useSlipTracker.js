@@ -83,7 +83,7 @@ export function useSlipTracker() {
       league:       league || 'ALL',
     }
 
-    const { data, error } = await supabase.from('slips').upsert(row, { onConflict: 'id' }).select().single()
+    const { data, error } = await supabase.from('slips').insert({ id: crypto.randomUUID(), ...row }).select().single()
     if (error) { console.error('[Supabase] upsert error:', error.message); return }
     setTrackedSlips(prev => [rowToSlip(data), ...prev])
   }, [])
