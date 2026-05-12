@@ -2,7 +2,7 @@
 // Returns { lines: { "normname::StatType": { dk, fd } }, updatedAt, debug }
 // Cached server-side for 60 minutes to preserve API quota.
 
-const CACHE_TTL_MS = 60 * 60 * 1000
+const CACHE_TTL_MS = 60 * 1000  // 1 min during debugging
 
 let cache = { ts: 0, data: null }
 
@@ -62,7 +62,7 @@ async function safeFetch(url, label) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Cache-Control', 'public, max-age=3600')
+  res.setHeader('Cache-Control', 'public, max-age=60')
 
   // Invalidate cache if it captured a bad state (missing key or empty lines).
   if (cache.data) {
