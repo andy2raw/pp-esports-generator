@@ -161,11 +161,22 @@ export default function App() {
 
   const lotteryPool = useMemo(() => scoredSort(resolvedSlipPool), [resolvedSlipPool])
 
-  // Under pool: filter pre-resolved esports props to UNDER picks only.
-  const underPool = useMemo(
-    () => scoredSort(resolvedSlipPool.filter(p => p.overUnder === 'UNDER')),
-    [resolvedSlipPool],
-  )
+  // Under pool: formula-based qualification — only props whose line is ≥20% above
+  // typical avg qualify. underProb = min(0.82, 0.50 + (ratio-1.20)*0.75).
+  // fadeStrength is stored as integer % (e.g., 31 → "31% ABOVE AVG").
+  const underPool = useMemo(() => {
+    const qualified = []
+    for (const p of esportsProjections) {
+      const typical = typicalAvg(p.league, p.statType)
+      if (typical == null) continue
+      const ratio = p.line / typical
+      if (ratio < 1.20) continue  // Not a strong enough fade
+      const underProb    = Math.min(0.82, 0.50 + (ratio - 1.20) * 0.75)
+      const fadeStrength = Math.round((ratio - 1) * 100)
+      qualified.push({ ...p, overUnder: 'UNDER', probability: underProb, sharp: false, fadeStrength })
+    }
+    return scoredSort(qualified)
+  }, [esportsProjections])
 
   const underRaw = useMemo(() => {
     if (underPool.length < 2) return { u2: [], u3: [], u4: [] }
@@ -506,7 +517,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Under Parlay — UNDER-only props, placed between Edge 3-Leg and Lottery */}
+                {/* Under Parlay — lines ≥20% above typical, formula-based underProb */}
                 {hasUnderSlips && (
                   <div style={{
                     marginBottom: 32,
@@ -524,23 +535,75 @@ export default function App() {
                         border: '1px solid #ef444433', borderRadius: 4, padding: '2px 6px', letterSpacing: 0.5,
                       }}>FADE THE LINE</span>
                     </div>
-                    <p style={{ margin: '0 0 14px', fontSize: 10, color: '#555', fontStyle: 'italic' }}>
-                      Props where the line sits above typical averages — bet the UNDER.
+                    <p style={{ margin: '0 0 16px', fontSize: 10, color: '#555', fontStyle: 'italic' }}>
+                      Lines set ≥20% above typical average. Two 65%+ fades = 42%+ joint at 3× payout — positive EV.
                     </p>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-                      {underCombos4.map((c, i) => (
-                        <SlipCard key={`u4-${i}`} combo={c} rank={i + 1} variant="core4" confidence={c.confidence}
-                          onTrack={() => addSlip(c, 'Under Parlay 4-Leg', league)} />
-                      ))}
-                      {underCombos3.map((c, i) => (
-                        <SlipCard key={`u3-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
-                          onTrack={() => addSlip(c, 'Under Parlay 3-Leg', league)} />
-                      ))}
-                      {underCombos2.map((c, i) => (
-                        <SlipCard key={`u2-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
-                          onTrack={() => addSlip(c, 'Under Parlay 2-Leg', league)} />
-                      ))}
-                    </div>
+
+                    {/* Primary: 2-leg under — best risk/reward */}
+                    {underCombos2.length > 0 && (
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+                          fontSize: 10, fontWeight: 800, color: '#ef4444', letterSpacing: 1,
+                        }}>
+                          PRIMARY FADE
+                          <span style={{
+                            fontSize: 9, color: '#888', background: '#2a1010',
+                            border: '1px solid #ef444433', borderRadius: 4, padding: '1px 6px',
+                          }}>2-LEG · BEST EV</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+                          {underCombos2.map((c, i) => (
+                            <SlipCard key={`u2-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
+                              onTrack={() => addSlip(c, 'Under Parlay 2-Leg', league)} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Higher risk: 3-leg */}
+                    {underCombos3.length > 0 && (
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+                          fontSize: 10, fontWeight: 700, color: '#ef444488', letterSpacing: 1,
+                        }}>
+                          HIGHER RISK
+                          <span style={{
+                            fontSize: 9, color: '#666', background: '#1f1010',
+                            border: '1px solid #ef444422', borderRadius: 4, padding: '1px 6px',
+                          }}>3-LEG</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+                          {underCombos3.map((c, i) => (
+                            <SlipCard key={`u3-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
+                              onTrack={() => addSlip(c, 'Under Parlay 3-Leg', league)} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Higher risk: 4-leg */}
+                    {underCombos4.length > 0 && (
+                      <div>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+                          fontSize: 10, fontWeight: 700, color: '#ef444466', letterSpacing: 1,
+                        }}>
+                          HIGHER RISK
+                          <span style={{
+                            fontSize: 9, color: '#555', background: '#1a0f0f',
+                            border: '1px solid #ef444418', borderRadius: 4, padding: '1px 6px',
+                          }}>4-LEG</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+                          {underCombos4.map((c, i) => (
+                            <SlipCard key={`u4-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
+                              onTrack={() => addSlip(c, 'Under Parlay 4-Leg', league)} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

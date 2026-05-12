@@ -189,6 +189,13 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack }) 
                 <span style={{ fontSize: 10, color: '#888' }}>
                   {p.statType} O{p.line}
                 </span>
+                {/* Fade strength — shown on UNDER PARLAY picks */}
+                {p.fadeStrength != null && (
+                  <span style={{
+                    fontSize: 8, fontWeight: 700, color: '#ef444499',
+                    letterSpacing: 0.4,
+                  }}>LINE {p.fadeStrength}% ABOVE AVG</span>
+                )}
                 {/* OVER/UNDER recommendation */}
                 {p.overUnder && (
                   <span style={{
