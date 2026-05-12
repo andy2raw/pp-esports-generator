@@ -1,5 +1,21 @@
-import { useLadder, STARTING_BANKROLL, MULTIPLIER } from '../hooks/useLadder.js'
+import { useLadder, STARTING_BANKROLL, MULTIPLIER, TIERS, getTier } from '../hooks/useLadder.js'
 import { fmtPct, fmtEV } from '../utils/ev.js'
+
+const TIER_COLORS = {
+  BEGINNER: { color: '#888',    border: '#33333380', bg: '#1e1e1e' },
+  BUILDER:  { color: '#22c55e', border: '#22c55e40', bg: '#0d1f0d' },
+  SERIOUS:  { color: '#c9a84c', border: '#c9a84c40', bg: '#1a1800' },
+  SHARP:    { color: '#60a5fa', border: '#60a5fa40', bg: '#0d1525' },
+}
+
+function qualifiesForTier(slip, tier) {
+  if (!slip) return false
+  if (slip.jointProb < tier.minJointProb) return false
+  if (tier.minConfidence > 0 && (slip.confidence ?? 0) < tier.minConfidence) return false
+  if (tier.noGoblins && slip.goblinCount > 0) return false
+  if (tier.noDemons && slip.picks.some(p => p.oddsType === 'demon')) return false
+  return true
+}
 
 function BankrollChart({ data }) {
   if (data.length < 2) return (
@@ -30,28 +46,79 @@ function BankrollChart({ data }) {
   )
 }
 
-function SlipPreview({ slip }) {
-  if (!slip) return (
-    <div style={{ color: '#555', fontSize: 12, padding: '12px 0' }}>
-      No Precision 2-Leg slip available today.
+function TierBadge({ tier }) {
+  const c = TIER_COLORS[tier.name] ?? TIER_COLORS.BEGINNER
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 800, letterSpacing: 1,
+      color: c.color, background: c.bg,
+      border: `1px solid ${c.border}`,
+      borderRadius: 5, padding: '3px 8px',
+    }}>{tier.name}</span>
+  )
+}
+
+function HalfBetPanel({ bankroll }) {
+  const betAmt  = bankroll / 2
+  const keepAmt = bankroll / 2
+  const winTotal  = keepAmt + betAmt * MULTIPLIER
+  const lossTotal = keepAmt
+  return (
+    <div style={{
+      background: '#141414', border: '1px solid #2a2a2a', borderRadius: 8,
+      padding: '10px 14px', marginBottom: 12,
+    }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: '#555', letterSpacing: 0.8, marginBottom: 8 }}>
+        HALF-BET STRATEGY
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#c9a84c' }}>${betAmt.toFixed(2)}</div>
+          <div style={{ fontSize: 9, color: '#555', marginTop: 2 }}>BET</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#888' }}>${keepAmt.toFixed(2)}</div>
+          <div style={{ fontSize: 9, color: '#555', marginTop: 2 }}>KEEP SAFE</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{
+          flex: 1, textAlign: 'center', padding: '5px 0',
+          background: '#0d1f0d', border: '1px solid #22c55e33', borderRadius: 6,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#22c55e' }}>Win → ${winTotal.toFixed(2)}</div>
+        </div>
+        <div style={{
+          flex: 1, textAlign: 'center', padding: '5px 0',
+          background: '#1f0d0d', border: '1px solid #ef444433', borderRadius: 6,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#ef4444' }}>Loss → ${lossTotal.toFixed(2)}</div>
+        </div>
+      </div>
     </div>
   )
+}
+
+function SlipPreview({ slip }) {
   return (
     <div style={{ marginTop: 10 }}>
       <div style={{ fontSize: 10, color: '#666', marginBottom: 6 }}>
         Joint prob: {fmtPct(slip.jointProb)} · EV {fmtEV(slip.ev)}
+        {slip.confidence != null && (
+          <span style={{ marginLeft: 6, color: '#c9a84c' }}>Conf {slip.confidence}/10</span>
+        )}
       </div>
       {slip.picks.map((p, i) => (
         <div key={i} style={{
           display: 'flex', justifyContent: 'space-between',
           padding: '6px 10px', background: '#1c1c1c', borderRadius: 6, marginBottom: 4,
         }}>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--cream)' }}>{p.playerName}</span>
-            <span style={{ fontSize: 10, color: '#888', marginLeft: 6 }}>{p.statType} O{p.line}</span>
+            <span style={{ fontSize: 10, color: '#888' }}>{p.statType} O{p.line}</span>
             {p.overUnder && (
               <span style={{
-                marginLeft: 5, fontSize: 9, fontWeight: 700,
+                fontSize: 9, fontWeight: 700,
                 background: p.overUnder === 'OVER' ? '#22c55e14' : '#ef444414',
                 color: p.overUnder === 'OVER' ? '#22c55e' : '#ef4444',
                 border: `1px solid ${p.overUnder === 'OVER' ? '#22c55e40' : '#ef444440'}`,
@@ -59,7 +126,7 @@ function SlipPreview({ slip }) {
               }}>{p.overUnder}</span>
             )}
           </div>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#22c55e' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', flexShrink: 0, minWidth: 48, textAlign: 'right' }}>
             {fmtPct(p.probability)}
           </span>
         </div>
@@ -68,16 +135,20 @@ function SlipPreview({ slip }) {
   )
 }
 
-export default function LadderChallenge({ todaySlip }) {
+export default function LadderChallenge({ todaySlips = [] }) {
   const {
     loading, currentBankroll, currentStreak, bestStreak,
-    pendingEntry, chartData, entries,
-    addEntry, recordResult, restart,
+    tierJustChanged, pendingEntry, chartData, entries,
+    addEntry, recordResult, skipDay, restart,
   } = useLadder()
 
-  const settled = entries.filter(e => e.result !== 'Pending')
-  const level = currentStreak
-  const totalPlays = settled.length
+  const settled    = entries.filter(e => e.result !== 'Pending')
+  const totalPlays = settled.filter(e => e.result !== 'Skip').length
+  const level      = currentStreak
+
+  const currentTier     = getTier(currentBankroll)
+  const qualifyingSlip  = todaySlips.find(s => qualifiesForTier(s, currentTier)) ?? null
+  const tierColors      = TIER_COLORS[currentTier.name]
 
   if (loading) {
     return (
@@ -91,13 +162,30 @@ export default function LadderChallenge({ todaySlip }) {
     <div style={{ maxWidth: 480, margin: '0 auto', padding: '16px 16px 40px' }}>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 16, fontWeight: 800, color: '#c9a84c', letterSpacing: -0.5, marginBottom: 4 }}>
-          ★ Ladder Challenge
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: '#c9a84c', letterSpacing: -0.5 }}>
+            ★ Ladder Challenge
+          </div>
+          <TierBadge tier={currentTier} />
         </div>
         <div style={{ fontSize: 11, color: '#555' }}>
           Win a Precision 2-Leg slip → bankroll ×{MULTIPLIER}. Lose → reset to ${STARTING_BANKROLL}.
         </div>
       </div>
+
+      {/* Tier upgrade warning */}
+      {tierJustChanged && (
+        <div style={{
+          background: tierColors.bg, border: `1px solid ${tierColors.border}`,
+          borderRadius: 8, padding: '10px 14px', marginBottom: 16,
+          fontSize: 12, color: tierColors.color, fontWeight: 700,
+        }}>
+          You've reached {currentTier.name} tier — picks are now more selective to protect your stack.
+          <div style={{ fontSize: 10, color: '#888', fontWeight: 400, marginTop: 3 }}>
+            {currentTier.description}
+          </div>
+        </div>
+      )}
 
       {/* Stats row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 20 }}>
@@ -114,6 +202,26 @@ export default function LadderChallenge({ todaySlip }) {
             <div style={{ fontSize: 9, color: '#555', letterSpacing: 0.5, marginTop: 2 }}>{s.label}</div>
           </div>
         ))}
+      </div>
+
+      {/* Tier info bar */}
+      <div style={{
+        background: tierColors.bg, border: `1px solid ${tierColors.border}`,
+        borderRadius: 8, padding: '8px 14px', marginBottom: 16,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: tierColors.color }}>
+            {currentTier.name} TIER
+          </div>
+          <div style={{ fontSize: 10, color: '#666', marginTop: 2 }}>{currentTier.description}</div>
+        </div>
+        {currentTier.max < Infinity && (
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 10, color: '#555' }}>Next tier at</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#888' }}>${currentTier.max}</div>
+          </div>
+        )}
       </div>
 
       {/* Level bar */}
@@ -146,6 +254,9 @@ export default function LadderChallenge({ todaySlip }) {
         )}
       </div>
 
+      {/* Half-bet strategy */}
+      {!pendingEntry && <HalfBetPanel bankroll={currentBankroll} />}
+
       {/* Today's slip + action */}
       <div style={{
         background: '#181818', border: '1px solid #2a2a2a', borderRadius: 10, padding: '14px 16px',
@@ -163,7 +274,6 @@ export default function LadderChallenge({ todaySlip }) {
             }}>
               Slip in play — enter your result below.
             </div>
-            {/* Pending slip picks */}
             {Array.isArray(pendingEntry.slip_picks) && pendingEntry.slip_picks.map((p, i) => (
               <div key={i} style={{
                 display: 'flex', justifyContent: 'space-between',
@@ -173,7 +283,6 @@ export default function LadderChallenge({ todaySlip }) {
                 <span style={{ fontSize: 10, color: '#888' }}>{p.statType} O{p.line}</span>
               </div>
             ))}
-            {/* Win / Loss buttons */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
               <button
                 onClick={() => recordResult(pendingEntry.id, 'Win')}
@@ -195,22 +304,46 @@ export default function LadderChallenge({ todaySlip }) {
               </button>
             </div>
           </>
+        ) : qualifyingSlip ? (
+          <>
+            <SlipPreview slip={qualifyingSlip} />
+            <button
+              onClick={() => addEntry(qualifyingSlip)}
+              style={{
+                width: '100%', marginTop: 12, padding: '12px 0',
+                background: '#22c55e22', border: '1px solid #22c55e55',
+                color: 'var(--green)', borderRadius: 8,
+                fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              Play Today · ${currentBankroll.toFixed(2)}
+            </button>
+          </>
         ) : (
           <>
-            <SlipPreview slip={todaySlip} />
-            {todaySlip && (
-              <button
-                onClick={() => addEntry(todaySlip)}
-                style={{
-                  width: '100%', marginTop: 12, padding: '12px 0',
-                  background: '#22c55e22', border: '1px solid #22c55e55',
-                  color: 'var(--green)', borderRadius: 8,
-                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                }}
-              >
-                Play Today · ${currentBankroll.toFixed(2)}
-              </button>
-            )}
+            <div style={{
+              padding: '14px 12px', background: '#1a1111', border: '1px solid #ef444430',
+              borderRadius: 8, marginBottom: 12,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#ef4444', marginBottom: 4 }}>
+                No qualifying slip today for your bankroll level
+              </div>
+              <div style={{ fontSize: 11, color: '#888', lineHeight: 1.5 }}>
+                Protect your stack — skip today. The {currentTier.name} tier requires {fmtPct(currentTier.minJointProb)}+ joint probability
+                {currentTier.minConfidence > 0 ? ` and confidence ${currentTier.minConfidence}+` : ''}.
+              </div>
+            </div>
+            <button
+              onClick={skipDay}
+              style={{
+                width: '100%', padding: '11px 0',
+                background: '#1a1a1a', border: '1px solid #555',
+                color: '#888', borderRadius: 8,
+                fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              Skip Day — Protect My Stack
+            </button>
           </>
         )}
       </div>
@@ -229,7 +362,7 @@ export default function LadderChallenge({ todaySlip }) {
               </span>
               <span style={{
                 fontSize: 11, fontWeight: 700,
-                color: e.result === 'Win' ? '#22c55e' : '#ef4444',
+                color: e.result === 'Win' ? '#22c55e' : e.result === 'Skip' ? '#888' : '#ef4444',
               }}>{e.result}</span>
               <span style={{ fontSize: 11, color: '#888' }}>${e.bankroll.toFixed(2)}</span>
             </div>

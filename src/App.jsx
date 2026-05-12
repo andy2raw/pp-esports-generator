@@ -363,7 +363,7 @@ export default function App() {
 
       {/* ── Ladder tab ── */}
       {activeTab === 'ladder' && (
-        <LadderChallenge todaySlip={combos2[0] ?? null} />
+        <LadderChallenge todaySlips={combos2} />
       )}
 
       {/* ── Slips tab ── */}
