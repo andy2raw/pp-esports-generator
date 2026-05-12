@@ -6,33 +6,43 @@ const CACHE_TTL_MS = 60 * 60 * 1000
 
 let cache = { ts: 0, data: null }
 
+// Validated market keys from The Odds API for baseball_mlb player props.
+// batter_stolen_bases is NOT a valid key and causes 422 — removed.
 const MLB_MARKETS = [
   'batter_hits',
-  'batter_home_runs',
+  'batter_total_bases',
   'batter_rbis',
   'batter_runs_scored',
-  'batter_total_bases',
-  'batter_walks',
+  'batter_hits_runs_rbis',
+  'batter_singles',
+  'batter_doubles',
+  'batter_home_runs',
   'batter_strikeouts',
-  'batter_stolen_bases',
+  'batter_walks',
   'pitcher_strikeouts',
   'pitcher_hits_allowed',
+  'pitcher_walks',
   'pitcher_earned_runs',
+  'pitcher_outs',
 ].join(',')
 
 // Odds API market key → PrizePicks stat type label
 const MARKET_TO_STAT = {
   batter_hits:          'Hits',
-  batter_home_runs:     'Home Runs',
+  batter_total_bases:   'Total Bases',
   batter_rbis:          'RBIs',
   batter_runs_scored:   'Runs Scored',
-  batter_total_bases:   'Total Bases',
-  batter_walks:         'Walks',
+  batter_hits_runs_rbis:'Hits+Runs+RBIs',
+  batter_singles:       'Singles',
+  batter_doubles:       'Doubles',
+  batter_home_runs:     'Home Runs',
   batter_strikeouts:    'Strikeouts',
-  batter_stolen_bases:  'Stolen Bases',
+  batter_walks:         'Walks',
   pitcher_strikeouts:   'Pitcher Strikeouts',
   pitcher_hits_allowed: 'Hits Allowed',
+  pitcher_walks:        'Pitcher Walks',
   pitcher_earned_runs:  'Earned Runs Allowed',
+  pitcher_outs:         'Pitching Outs',
 }
 
 function normName(n) {
@@ -40,14 +50,13 @@ function normName(n) {
 }
 
 async function safeFetch(url, label) {
+  // Log full URL (mask key value but keep params visible for debugging)
+  const displayUrl = url.replace(/apiKey=[^&]+/, 'apiKey=***')
+  console.log(`[odds] ${label} → GET ${displayUrl}`)
   const res = await fetch(url)
   const remaining = res.headers.get('x-requests-remaining')
   const used      = res.headers.get('x-requests-used')
-  if (remaining || used) {
-    console.log(`[odds] ${label} → status ${res.status} | quota used=${used} remaining=${remaining}`)
-  } else {
-    console.log(`[odds] ${label} → status ${res.status}`)
-  }
+  console.log(`[odds] ${label} → status ${res.status} | quota used=${used ?? '?'} remaining=${remaining ?? '?'}`)
   return res
 }
 
