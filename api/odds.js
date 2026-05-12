@@ -106,14 +106,17 @@ export default async function handler(req, res) {
     debug.push(`sports:${Array.isArray(sports) ? sports.length : 'err'}`)
 
     // ── Step 2: Today's MLB events ───────────────────────────────────────────
-    const now  = Date.now()
-    const from = new Date(now - 3 * 60 * 60 * 1000).toISOString()
-    const to   = new Date(now + 24 * 60 * 60 * 1000).toISOString()
+    // Only apiKey + dateFormat on the events endpoint — commenceTime* params
+    // were causing 422s; filter the window client-side instead.
     const evRes = await safeFetch(
-      `https://api.the-odds-api.com/v4/sports/baseball_mlb/events?apiKey=${apiKey}&dateFormat=iso&commenceTimeFrom=${from}&commenceTimeTo=${to}`,
+      `https://api.the-odds-api.com/v4/sports/baseball_mlb/events?apiKey=${apiKey}&dateFormat=iso`,
       'mlb-events',
     )
-    if (!evRes.ok) throw new Error(`Events fetch failed: ${evRes.status}`)
+    if (!evRes.ok) {
+      const body = await evRes.text()
+      console.error('[odds] events fetch failed:', evRes.status, body.slice(0, 300))
+      throw new Error(`Events fetch failed: ${evRes.status}`)
+    }
     const eventsRaw = await evRes.json()
 
     if (!Array.isArray(eventsRaw)) {
@@ -121,10 +124,19 @@ export default async function handler(req, res) {
       return res.json({ lines: {}, updatedAt: new Date().toISOString(), debug: 'events_not_array' })
     }
 
-    console.log(`[odds] ${eventsRaw.length} MLB events in window`)
-    debug.push(`events:${eventsRaw.length}`)
+    // Filter to games within ±3h past → +24h future client-side
+    const now  = Date.now()
+    const from = now - 3 * 60 * 60 * 1000
+    const to   = now + 24 * 60 * 60 * 1000
+    const events = eventsRaw.filter(ev => {
+      const t = ev.commence_time ? new Date(ev.commence_time).getTime() : 0
+      return t >= from && t <= to
+    })
 
-    if (eventsRaw.length === 0) {
+    console.log(`[odds] ${eventsRaw.length} total MLB events, ${events.length} in today's window`)
+    debug.push(`events:${events.length}`)
+
+    if (events.length === 0) {
       const result = { lines: {}, updatedAt: new Date().toISOString(), debug: 'no_events_today' }
       cache = { ts: Date.now(), data: result }
       return res.json(result)
@@ -134,7 +146,7 @@ export default async function handler(req, res) {
     const lines = {}
     let totalOutcomes = 0
 
-    const fetches = eventsRaw.slice(0, 10).map(async (ev, idx) => {
+    const fetches = events.slice(0, 10).map(async (ev, idx) => {
       const propsRes = await safeFetch(
         `https://api.the-odds-api.com/v4/sports/baseball_mlb/events/${ev.id}/odds` +
           `?apiKey=${apiKey}&regions=us&markets=${MLB_MARKETS}&oddsFormat=american`,
