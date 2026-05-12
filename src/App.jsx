@@ -161,18 +161,23 @@ export default function App() {
 
   const lotteryPool = useMemo(() => scoredSort(resolvedSlipPool), [resolvedSlipPool])
 
-  // Under pool: formula-based qualification — only props whose line is ≥20% above
-  // typical avg qualify. underProb = min(0.82, 0.50 + (ratio-1.20)*0.75).
+  // Under pool: single-player esports props only, line ≥20% above typical avg.
+  // Combo props ("+", "&" in player name) are excluded — their summed lines
+  // inflate ratios and push everything to the 0.82 cap.
+  // underProb = min(0.82, 0.50 + (ratio-1.20)*0.75).
   // fadeStrength is stored as integer % (e.g., 31 → "31% ABOVE AVG").
   const underPool = useMemo(() => {
     const qualified = []
     for (const p of esportsProjections) {
+      // Skip combo/multi-player props
+      if (p.playerName.includes('+') || p.playerName.includes('&')) continue
       const typical = typicalAvg(p.league, p.statType)
       if (typical == null) continue
       const ratio = p.line / typical
       if (ratio < 1.20) continue  // Not a strong enough fade
       const underProb    = Math.min(0.82, 0.50 + (ratio - 1.20) * 0.75)
       const fadeStrength = Math.round((ratio - 1) * 100)
+      console.log(`[under] "${p.playerName}" line=${p.line} typical=${typical} ratio=${ratio.toFixed(3)} → ${underProb.toFixed(3)}`)
       qualified.push({ ...p, overUnder: 'UNDER', probability: underProb, sharp: false, fadeStrength })
     }
     return scoredSort(qualified)
