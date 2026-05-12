@@ -757,14 +757,29 @@ export default function App() {
                                 }}>~</span>
                               )}
                             </td>
-                            <td style={{ padding: '9px 10px' }}>
+                            <td style={{ padding: '9px 10px', whiteSpace: 'nowrap' }}>
                               {sl ? (
-                                <StatsBadge seasonAvg={sl.seasonAvg} last5Avg={sl.last5Avg} line={p.line} />
+                                p.league === 'MLB' ? (
+                                  <div style={{ fontSize: 10, lineHeight: 1.6 }}>
+                                    {sl.last5Avg != null && (
+                                      <div style={{ color: sl.last5Avg >= p.line ? 'var(--green)' : 'var(--red)', fontWeight: 700 }}>
+                                        L5&nbsp;{sl.last5Avg.toFixed(1)}
+                                      </div>
+                                    )}
+                                    {sl.seasonAvg != null && (
+                                      <div style={{ color: '#888' }}>
+                                        Szn&nbsp;{sl.seasonAvg.toFixed(1)}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <StatsBadge seasonAvg={sl.seasonAvg} last5Avg={sl.last5Avg} line={p.line} />
+                                )
                               ) : psLoading ? (
                                 <span style={{ color: '#444', fontSize: 10 }}>…</span>
                               ) : null}
                               {p.marketLines && (
-                                <div style={{ fontSize: 9, color: p.sharpValue ? '#22c55e' : '#666', marginTop: sl ? 4 : 0, fontWeight: p.sharpValue ? 700 : 400, whiteSpace: 'nowrap' }}>
+                                <div style={{ fontSize: 9, color: p.sharpValue ? '#22c55e' : '#666', marginTop: sl ? 4 : 0, fontWeight: p.sharpValue ? 700 : 400 }}>
                                   PP&nbsp;O{p.line}
                                   {p.marketLines.dk != null && <> · DK&nbsp;O{p.marketLines.dk}</>}
                                   {p.marketLines.fd != null && <> · FD&nbsp;O{p.marketLines.fd}</>}
