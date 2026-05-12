@@ -8,13 +8,30 @@ const TIER_COLORS = {
   SHARP:    { color: '#60a5fa', border: '#60a5fa40', bg: '#0d1525' },
 }
 
-function qualifiesForTier(slip, tier) {
-  if (!slip) return false
-  if (slip.jointProb < tier.minJointProb) return false
-  if (tier.minConfidence > 0 && (slip.confidence ?? 0) < tier.minConfidence) return false
-  if (tier.noGoblins && slip.goblinCount > 0) return false
-  if (tier.noDemons && slip.picks.some(p => p.oddsType === 'demon')) return false
-  return true
+// Sort slips so the best pick for the current tier floats to the top.
+// Never blocks — always returns slips[0] after sorting.
+function pickBestSlip(slips, tier) {
+  if (!slips.length) return null
+  return [...slips].sort((a, b) => {
+    // Prefer standard lines (no goblins) at SERIOUS/SHARP tier
+    if (tier.noGoblins) {
+      const ag = a.goblinCount === 0 ? 0 : 1
+      const bg = b.goblinCount === 0 ? 0 : 1
+      if (ag !== bg) return ag - bg
+    }
+    // Prefer no demons at SHARP tier
+    if (tier.noDemons) {
+      const ad = a.picks.some(p => p.oddsType === 'demon') ? 1 : 0
+      const bd = b.picks.some(p => p.oddsType === 'demon') ? 1 : 0
+      if (ad !== bd) return ad - bd
+    }
+    // Prefer higher confidence at BUILDER+ tier
+    if (tier.minConfidence > 0) {
+      const cd = (b.confidence ?? 0) - (a.confidence ?? 0)
+      if (cd !== 0) return cd
+    }
+    return b.jointProb - a.jointProb
+  })[0]
 }
 
 function BankrollChart({ data }) {
@@ -139,16 +156,16 @@ export default function LadderChallenge({ todaySlips = [] }) {
   const {
     loading, currentBankroll, currentStreak, bestStreak,
     tierJustChanged, pendingEntry, chartData, entries,
-    addEntry, recordResult, skipDay, restart,
+    addEntry, recordResult, restart,
   } = useLadder()
 
   const settled    = entries.filter(e => e.result !== 'Pending')
-  const totalPlays = settled.filter(e => e.result !== 'Skip').length
+  const totalPlays = settled.length
   const level      = currentStreak
 
-  const currentTier     = getTier(currentBankroll)
-  const qualifyingSlip  = todaySlips.find(s => qualifiesForTier(s, currentTier)) ?? null
-  const tierColors      = TIER_COLORS[currentTier.name]
+  const currentTier  = getTier(currentBankroll)
+  const todaySlip    = pickBestSlip(todaySlips, currentTier)
+  const tierColors   = TIER_COLORS[currentTier.name]
 
   if (loading) {
     return (
@@ -304,11 +321,11 @@ export default function LadderChallenge({ todaySlips = [] }) {
               </button>
             </div>
           </>
-        ) : qualifyingSlip ? (
+        ) : todaySlip ? (
           <>
-            <SlipPreview slip={qualifyingSlip} />
+            <SlipPreview slip={todaySlip} />
             <button
-              onClick={() => addEntry(qualifyingSlip)}
+              onClick={() => addEntry(todaySlip)}
               style={{
                 width: '100%', marginTop: 12, padding: '12px 0',
                 background: '#22c55e22', border: '1px solid #22c55e55',
@@ -320,31 +337,9 @@ export default function LadderChallenge({ todaySlips = [] }) {
             </button>
           </>
         ) : (
-          <>
-            <div style={{
-              padding: '14px 12px', background: '#1a1111', border: '1px solid #ef444430',
-              borderRadius: 8, marginBottom: 12,
-            }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#ef4444', marginBottom: 4 }}>
-                No qualifying slip today for your bankroll level
-              </div>
-              <div style={{ fontSize: 11, color: '#888', lineHeight: 1.5 }}>
-                Protect your stack — skip today. The {currentTier.name} tier requires {fmtPct(currentTier.minJointProb)}+ joint probability
-                {currentTier.minConfidence > 0 ? ` and confidence ${currentTier.minConfidence}+` : ''}.
-              </div>
-            </div>
-            <button
-              onClick={skipDay}
-              style={{
-                width: '100%', padding: '11px 0',
-                background: '#1a1a1a', border: '1px solid #555',
-                color: '#888', borderRadius: 8,
-                fontSize: 13, fontWeight: 700, cursor: 'pointer',
-              }}
-            >
-              Skip Day — Protect My Stack
-            </button>
-          </>
+          <div style={{ color: '#555', fontSize: 12, padding: '12px 0' }}>
+            No Precision 2-Leg slip available yet — check back after data loads.
+          </div>
         )}
       </div>
 
@@ -362,7 +357,7 @@ export default function LadderChallenge({ todaySlips = [] }) {
               </span>
               <span style={{
                 fontSize: 11, fontWeight: 700,
-                color: e.result === 'Win' ? '#22c55e' : e.result === 'Skip' ? '#888' : '#ef4444',
+                color: e.result === 'Win' ? '#22c55e' : '#ef4444',
               }}>{e.result}</span>
               <span style={{ fontSize: 11, color: '#888' }}>${e.bankroll.toFixed(2)}</span>
             </div>

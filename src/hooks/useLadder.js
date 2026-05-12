@@ -123,19 +123,6 @@ export function useLadder() {
     setEntries(prev => prev.map(e => e.id === id ? { ...e, result } : e))
   }, [entries])
 
-  const skipDay = useCallback(async () => {
-    const row = {
-      streak:       currentStreak,
-      bankroll:     currentBankroll,
-      result:       'Skip',
-      slip_picks:   [],
-      entry_amount: 0,
-    }
-    const { data, error } = await supabase.from('ladder').insert(row).select().single()
-    if (error) { console.error('[Ladder] skip error:', error.message); return }
-    setEntries(prev => [...prev, data])
-  }, [currentBankroll, currentStreak])
-
   const restart = useCallback(async () => {
     const { error } = await supabase.from('ladder').delete().lte('created_at', new Date().toISOString())
     if (error) { console.error('[Ladder] restart error:', error.message); return }
@@ -153,7 +140,6 @@ export function useLadder() {
     chartData,
     addEntry,
     recordResult,
-    skipDay,
     restart,
   }
 }
