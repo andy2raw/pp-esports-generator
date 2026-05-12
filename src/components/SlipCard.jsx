@@ -155,7 +155,7 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack }) 
               borderRadius: 6,
               border: strongest ? '1px solid #22c55e22' : weakest ? '1px solid #ef444422' : 'none',
             }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, minWidth: 0, flex: 1 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--cream)' }}>
                   {p.playerName}
                 </span>
@@ -208,7 +208,7 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack }) 
                 )}
               </div>
               <span style={{
-                fontSize: 11, fontWeight: 700, flexShrink: 0, marginLeft: 8,
+                fontSize: 11, fontWeight: 700, flexShrink: 0, marginLeft: 8, minWidth: 52, textAlign: 'right',
                 color: strongest ? 'var(--green)' : weakest ? 'var(--red)' : probColor(p.probability),
               }}>
                 {fmtPct(p.probability)}
