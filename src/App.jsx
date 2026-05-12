@@ -155,6 +155,11 @@ export default function App() {
     [enrichedProjections],
   )
 
+  const mlbProjections = useMemo(
+    () => enrichedProjections.filter(p => p.league === 'MLB'),
+    [enrichedProjections],
+  )
+
   // Pre-resolve OVER/UNDER for every esports prop so bestCombos scores by
   // direction-adjusted probability (not raw server prob). Log first 10 for verification.
   const resolvedSlipPool = useMemo(() => {
@@ -171,14 +176,27 @@ export default function App() {
     return resolved
   }, [esportsProjections, getStatLine])
 
-  // slipPool: esports-only, direction-adjusted, league-prioritised.
-  // MLB is never included here — it's display-only in the table/top-picks.
+  // MLB props resolved with OVER/UNDER from real L5 stats (via usePandaScore → mlb-stats).
+  const resolvedMlbPool = useMemo(() =>
+    scoredSort(mlbProjections.map(p => {
+      const sl = getStatLine(p.playerName, p.league, p.statType)
+      const { overUnder, probability, sharp } = resolveOverUnder(sl, p.league, p.statType, p.line, p.probability)
+      return { ...p, overUnder, probability, sharp }
+    })),
+    [mlbProjections, getStatLine],
+  )
+
+  // slipPool: source depends on the active league tab.
+  //   MLB  → MLB props only
+  //   ALL  → esports + MLB blended
+  //   else → esports tab, prioritise selected league
   const slipPool = useMemo(() => {
-    if (league === 'ALL' || league === 'MLB') return scoredSort(resolvedSlipPool)
+    if (league === 'MLB') return resolvedMlbPool
+    if (league === 'ALL') return scoredSort([...resolvedSlipPool, ...resolvedMlbPool])
     const primary   = scoredSort(resolvedSlipPool.filter(p => inLeague(p, league)))
     const secondary = scoredSort(resolvedSlipPool.filter(p => !inLeague(p, league)))
     return [...primary, ...secondary]
-  }, [resolvedSlipPool, league])
+  }, [resolvedSlipPool, resolvedMlbPool, league])
 
   const lotteryPool = useMemo(() => scoredSort(resolvedSlipPool), [resolvedSlipPool])
 
