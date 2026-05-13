@@ -356,9 +356,9 @@ export default function App() {
     [under6Raw, getStatLine, playerHistory],
   )
 
-  // Ladder-dedicated 2-leg combo. Built from a demon-free pool so demons can
-  // never appear on the ladder. GOBLIN picks are kept but sorted last by bestCombos.
-  // Returns null when no combo reaches the 55% joint-prob threshold.
+  // Ladder-dedicated 2-leg combo. Pulls from the same demon-free pool that
+  // feeds the PRECISION 2-LEG cards. Takes the best available (no minimum
+  // floor) — only returns null when nothing clears 40% joint prob.
   const ladderSlip = useMemo(() => {
     const noDemons = resolvedSlipPool.filter(p => p.oddsType !== 'demon')
     if (noDemons.length < 2) return null
@@ -367,15 +367,14 @@ export default function App() {
       ...withOverUnder(c, getStatLine),
       confidence: calcConfidence(c, getStatLine, playerHistory),
     }))
-    const qualifying = withMeta
-      .filter(c => c.jointProb >= 0.55)
-      .sort((a, b) => {
-        const ag = a.goblinCount === 0 ? 0 : 1
-        const bg = b.goblinCount === 0 ? 0 : 1
-        if (ag !== bg) return ag - bg
-        return b.jointProb - a.jointProb
-      })
-    return qualifying[0] ?? null
+    const sorted = withMeta.sort((a, b) => {
+      const ag = a.goblinCount === 0 ? 0 : 1
+      const bg = b.goblinCount === 0 ? 0 : 1
+      if (ag !== bg) return ag - bg
+      return b.jointProb - a.jointProb
+    })
+    const best = sorted[0] ?? null
+    return best && best.jointProb >= 0.40 ? best : null
   }, [resolvedSlipPool, getStatLine, playerHistory])
 
   const hasUnderSlips = underCombos2.length > 0 || underCombos3.length > 0 || underCombos4.length > 0
