@@ -1,5 +1,5 @@
 import { useLadder, STARTING_BANKROLL, MULTIPLIER, TIERS, getTier } from '../hooks/useLadder.js'
-import { fmtPct, fmtEV } from '../utils/ev.js'
+import { fmtPct, fmtEV, isLock, isGoblin } from '../utils/ev.js'
 
 const TIER_COLORS = {
   BEGINNER: { color: '#888',    border: '#33333380', bg: '#1e1e1e' },
@@ -8,31 +8,6 @@ const TIER_COLORS = {
   SHARP:    { color: '#60a5fa', border: '#60a5fa40', bg: '#0d1525' },
 }
 
-// Sort slips so the best pick for the current tier floats to the top.
-// Never blocks — always returns slips[0] after sorting.
-function pickBestSlip(slips, tier) {
-  if (!slips.length) return null
-  return [...slips].sort((a, b) => {
-    // Prefer standard lines (no goblins) at SERIOUS/SHARP tier
-    if (tier.noGoblins) {
-      const ag = a.goblinCount === 0 ? 0 : 1
-      const bg = b.goblinCount === 0 ? 0 : 1
-      if (ag !== bg) return ag - bg
-    }
-    // Prefer no demons at SHARP tier
-    if (tier.noDemons) {
-      const ad = a.picks.some(p => p.oddsType === 'demon') ? 1 : 0
-      const bd = b.picks.some(p => p.oddsType === 'demon') ? 1 : 0
-      if (ad !== bd) return ad - bd
-    }
-    // Prefer higher confidence at BUILDER+ tier
-    if (tier.minConfidence > 0) {
-      const cd = (b.confidence ?? 0) - (a.confidence ?? 0)
-      if (cd !== 0) return cd
-    }
-    return b.jointProb - a.jointProb
-  })[0]
-}
 
 function BankrollChart({ data }) {
   if (data.length < 2) return (
@@ -116,6 +91,21 @@ function HalfBetPanel({ bankroll }) {
   )
 }
 
+const PICK_BADGES = {
+  lock:   { label: 'LOCK',   bg: '#1d4ed822', color: '#60a5fa', border: '#1d4ed855' },
+  goblin: { label: 'GOBLIN', bg: '#16a34a22', color: '#16a34a', border: '#16a34a55' },
+  demon:  { label: 'DEMON',  bg: '#6b21a822', color: '#a78bfa', border: '#6b21a855' },
+  sharp:  { label: 'SHARP',  bg: '#eab30814', color: '#eab308', border: '#eab30840' },
+}
+
+function pickBadge(p) {
+  if (isLock(p.line, p.statType))  return PICK_BADGES.lock
+  if (p.oddsType === 'demon')       return PICK_BADGES.demon
+  if (isGoblin(p))                  return PICK_BADGES.goblin
+  if (p.sharp)                      return PICK_BADGES.sharp
+  return null
+}
+
 function SlipPreview({ slip }) {
   return (
     <div style={{ marginTop: 10 }}>
@@ -125,34 +115,44 @@ function SlipPreview({ slip }) {
           <span style={{ marginLeft: 6, color: '#c9a84c' }}>Conf {slip.confidence}/10</span>
         )}
       </div>
-      {slip.picks.map((p, i) => (
-        <div key={i} style={{
-          display: 'flex', justifyContent: 'space-between',
-          padding: '6px 10px', background: '#1c1c1c', borderRadius: 6, marginBottom: 4,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--cream)' }}>{p.playerName}</span>
-            <span style={{ fontSize: 10, color: '#888' }}>{p.statType} O{p.line}</span>
-            {p.overUnder && (
-              <span style={{
-                fontSize: 9, fontWeight: 700,
-                background: p.overUnder === 'OVER' ? '#22c55e14' : '#ef444414',
-                color: p.overUnder === 'OVER' ? '#22c55e' : '#ef4444',
-                border: `1px solid ${p.overUnder === 'OVER' ? '#22c55e40' : '#ef444440'}`,
-                borderRadius: 3, padding: '1px 4px',
-              }}>{p.overUnder}</span>
-            )}
+      {slip.picks.map((p, i) => {
+        const badge = pickBadge(p)
+        return (
+          <div key={i} style={{
+            display: 'flex', justifyContent: 'space-between',
+            padding: '6px 10px', background: '#1c1c1c', borderRadius: 6, marginBottom: 4,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--cream)' }}>{p.playerName}</span>
+              {badge && (
+                <span style={{
+                  fontSize: 8, fontWeight: 700, letterSpacing: 0.3,
+                  background: badge.bg, color: badge.color,
+                  border: `1px solid ${badge.border}`, borderRadius: 3, padding: '1px 4px',
+                }}>{badge.label}</span>
+              )}
+              <span style={{ fontSize: 10, color: '#888' }}>{p.statType} O{p.line}</span>
+              {p.overUnder && (
+                <span style={{
+                  fontSize: 9, fontWeight: 700,
+                  background: p.overUnder === 'OVER' ? '#22c55e14' : '#ef444414',
+                  color: p.overUnder === 'OVER' ? '#22c55e' : '#ef4444',
+                  border: `1px solid ${p.overUnder === 'OVER' ? '#22c55e40' : '#ef444440'}`,
+                  borderRadius: 3, padding: '1px 4px',
+                }}>{p.overUnder}</span>
+              )}
+            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', flexShrink: 0, minWidth: 48, textAlign: 'right' }}>
+              {fmtPct(p.probability)}
+            </span>
           </div>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', flexShrink: 0, minWidth: 48, textAlign: 'right' }}>
-            {fmtPct(p.probability)}
-          </span>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
 
-export default function LadderChallenge({ todaySlips = [] }) {
+export default function LadderChallenge({ todaySlip = null }) {
   const {
     loading, currentBankroll, currentStreak, bestStreak,
     tierJustChanged, pendingEntry, chartData, entries,
@@ -163,9 +163,8 @@ export default function LadderChallenge({ todaySlips = [] }) {
   const totalPlays = settled.length
   const level      = currentStreak
 
-  const currentTier  = getTier(currentBankroll)
-  const todaySlip    = pickBestSlip(todaySlips, currentTier)
-  const tierColors   = TIER_COLORS[currentTier.name]
+  const currentTier = getTier(currentBankroll)
+  const tierColors  = TIER_COLORS[currentTier.name]
 
   if (loading) {
     return (
@@ -348,8 +347,11 @@ export default function LadderChallenge({ todaySlips = [] }) {
             </button>
           </>
         ) : (
-          <div style={{ color: '#555', fontSize: 12, padding: '12px 0' }}>
-            No Precision 2-Leg slip available yet — check back after data loads.
+          <div style={{ color: '#555', fontSize: 12, padding: '12px 0', lineHeight: 1.5 }}>
+            No high-confidence slip available today — check back when lines update.
+            <div style={{ fontSize: 10, color: '#444', marginTop: 4 }}>
+              Requires 55%+ joint probability from LOCK/SHARP/NEUTRAL props (no demons).
+            </div>
           </div>
         )}
       </div>

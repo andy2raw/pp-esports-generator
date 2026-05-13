@@ -354,6 +354,28 @@ export default function App() {
     [under6Raw, getStatLine, playerHistory],
   )
 
+  // Ladder-dedicated 2-leg combo. Built from a demon-free pool so demons can
+  // never appear on the ladder. GOBLIN picks are kept but sorted last by bestCombos.
+  // Returns null when no combo reaches the 55% joint-prob threshold.
+  const ladderSlip = useMemo(() => {
+    const noDemons = resolvedSlipPool.filter(p => p.oddsType !== 'demon')
+    if (noDemons.length < 2) return null
+    const combos = bestCombos(noDemons, 2, 10)
+    const withMeta = combos.map(c => ({
+      ...withOverUnder(c, getStatLine),
+      confidence: calcConfidence(c, getStatLine, playerHistory),
+    }))
+    const qualifying = withMeta
+      .filter(c => c.jointProb >= 0.55)
+      .sort((a, b) => {
+        const ag = a.goblinCount === 0 ? 0 : 1
+        const bg = b.goblinCount === 0 ? 0 : 1
+        if (ag !== bg) return ag - bg
+        return b.jointProb - a.jointProb
+      })
+    return qualifying[0] ?? null
+  }, [resolvedSlipPool, getStatLine, playerHistory])
+
   const hasUnderSlips = underCombos2.length > 0 || underCombos3.length > 0 || underCombos4.length > 0
   const hasSlips = combos2.length > 0 || combos3.length > 0 || combos4.length > 0 || lotterySlip || hasUnderSlips || underCombos6.length > 0
 
@@ -414,7 +436,7 @@ export default function App() {
 
       {/* ── Ladder tab ── */}
       {activeTab === 'ladder' && (
-        <LadderChallenge todaySlips={combos2} />
+        <LadderChallenge todaySlip={ladderSlip} />
       )}
 
       {/* ── Results tab ── */}
