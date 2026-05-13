@@ -30,7 +30,7 @@ function correlationFactor(picks) {
   return Math.pow(0.85, pairs)
 }
 
-const MAX_PLAYER_APPEARANCES = 2
+const MAX_PLAYER_APPEARANCES = 1
 const MAX_GOBLINS = { 2: 1, 3: 1, 4: 2, 5: 2, 6: 2 }
 
 function isDemon(p) { return p.oddsType === 'demon' }

@@ -48,10 +48,11 @@ function hitRateLabel(r) {
   return 'SPECULATIVE'
 }
 
+// Gold / silver / bronze — colors per spec
 const RANK_BADGES = {
   1: { text: '🥇 BEST', color: '#f59e0b', bg: '#f59e0b14', border: '#f59e0b55' },
-  2: { text: '#2',      color: '#9ca3af', bg: '#9ca3af14', border: '#9ca3af55' },
-  3: { text: '#3',      color: '#b45309', bg: '#b4530914', border: '#b4530955' },
+  2: { text: '#2',      color: '#aaaaaa', bg: '#aaaaaa14', border: '#aaaaaa55' },
+  3: { text: '#3',      color: '#cd7f32', bg: '#cd7f3214', border: '#cd7f3255' },
 }
 
 export default function SlipCard({ combo, rank, variant, confidence, onTrack, label }) {
@@ -74,8 +75,15 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
   const bgColor     = isLottery ? '#1f1c14' : isCore4 ? '#191506' : '#242424'
   const accentColor = isLottery || isCore4 ? '#c9a84c' : '#888'
 
-  const hrColor  = hitRateColor(jointProb)
+  const hrColor   = hitRateColor(jointProb)
   const rankBadge = RANK_BADGES[rank] ?? null
+
+  // Shared small-badge style
+  const pill = (bg, color, border) => ({
+    fontSize: 9, fontWeight: 700, letterSpacing: 0.3,
+    background: bg, color, border: `1px solid ${border}`,
+    borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap',
+  })
 
   return (
     <div style={{
@@ -86,63 +94,43 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
       marginBottom: 12,
       boxShadow: isLottery ? '0 0 12px #c9a84c22' : isCore4 ? '0 0 20px #b8860b33' : 'none',
     }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        {/* Left: rank badge + slip label */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: 1 }}>
-          {rankBadge && (
-            <span style={{
-              fontSize: 9, fontWeight: 800, letterSpacing: 0.4, flexShrink: 0,
-              color: rankBadge.color, background: rankBadge.bg,
-              border: `1px solid ${rankBadge.border}`,
-              borderRadius: 4, padding: '2px 6px',
-            }}>{rankBadge.text}</span>
-          )}
-          <span style={{ fontSize: isCore4 ? 13 : 11, fontWeight: 700, letterSpacing: 1, color: accentColor }}>
-            {isCore4 ? `★ ${slipLabel}` : slipLabel}
+
+      {/* ── Row 1: rank badge · slip title · correlation · risk ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+        {rankBadge && (
+          <span style={pill(rankBadge.bg, rankBadge.color, rankBadge.border)}>
+            {rankBadge.text}
           </span>
-        </div>
+        )}
+        <span style={{ fontSize: isCore4 ? 13 : 11, fontWeight: 700, letterSpacing: 1, color: accentColor }}>
+          {isCore4 ? `★ ${slipLabel}` : slipLabel}
+        </span>
+        <span style={pill(corr.bg, corr.color, corr.border)}>{corr.label}</span>
+        <span style={pill(risk.bg, risk.color, risk.border)}>{risk.label}</span>
+      </div>
 
-        {/* Right: correlation, risk, conf, hit rate */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
-          {/* Correlation */}
-          <span style={{
-            fontSize: 9, fontWeight: 700, letterSpacing: 0.3,
-            background: corr.bg, color: corr.color, border: `1px solid ${corr.border}`,
-            borderRadius: 4, padding: '2px 5px',
-          }}>{corr.label}</span>
-
-          {/* Risk tier */}
-          <span style={{
-            fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
-            background: risk.bg, color: risk.color, border: `1px solid ${risk.border}`,
-            borderRadius: 4, padding: '2px 6px',
-          }}>{risk.label}</span>
-
-          {/* Confidence score */}
-          {confidence != null && (
-            <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              background: confidence >= 7 ? '#22c55e22' : confidence >= 5 ? '#eab30822' : '#ef444422',
-              border: `1px solid ${confidence >= 7 ? '#22c55e55' : confidence >= 5 ? '#eab30855' : '#ef444455'}`,
-              borderRadius: 6, padding: '3px 8px', minWidth: 36,
-            }}>
-              <span style={{
-                fontSize: 18, fontWeight: 800, lineHeight: 1,
-                color: confidence >= 7 ? 'var(--green)' : confidence >= 5 ? 'var(--yellow)' : 'var(--red)',
-              }}>{confidence}</span>
-              <span style={{ fontSize: 7, color: '#555', letterSpacing: 0.3 }}>CONF</span>
-            </div>
-          )}
-
-          {/* Hit Rate */}
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: hrColor, lineHeight: 1 }}>
-              HIT RATE {fmtPct(jointProb)}
-            </div>
-            <div style={{ fontSize: 8, fontWeight: 700, color: hrColor, opacity: 0.75, letterSpacing: 0.4, marginTop: 2 }}>
-              {hitRateLabel(jointProb)}
-            </div>
+      {/* ── Row 2: CONF circle · HIT RATE · confidence label ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+        {confidence != null && (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0,
+            background: confidence >= 7 ? '#22c55e22' : confidence >= 5 ? '#eab30822' : '#ef444422',
+            border: `1px solid ${confidence >= 7 ? '#22c55e55' : confidence >= 5 ? '#eab30855' : '#ef444455'}`,
+            borderRadius: 8, padding: '5px 10px', minWidth: 44,
+          }}>
+            <span style={{
+              fontSize: 22, fontWeight: 800, lineHeight: 1,
+              color: confidence >= 7 ? 'var(--green)' : confidence >= 5 ? 'var(--yellow)' : 'var(--red)',
+            }}>{confidence}</span>
+            <span style={{ fontSize: 7, color: '#555', letterSpacing: 0.5, marginTop: 1 }}>CONF</span>
+          </div>
+        )}
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: hrColor, lineHeight: 1 }}>
+            HIT RATE {fmtPct(jointProb)}
+          </div>
+          <div style={{ fontSize: 9, fontWeight: 700, color: hrColor, opacity: 0.75, letterSpacing: 0.5, marginTop: 3 }}>
+            {hitRateLabel(jointProb)}
           </div>
         </div>
       </div>
