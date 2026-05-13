@@ -35,7 +35,7 @@ function whySelected({ picks, goblinCount }) {
   return 'Selected for highest joint probability available today.'
 }
 
-export default function SlipCard({ combo, rank, variant, confidence, onTrack }) {
+export default function SlipCard({ combo, rank, variant, confidence, onTrack, label }) {
   const { picks, ev, jointProb, goblinCount } = combo
   const legCount  = picks.length
   const isLottery = variant === 'lottery'
@@ -44,7 +44,7 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack }) 
   const risk      = riskTier(jointProb)
   const corr      = correlationRating(picks)
   const whyLine   = whySelected(combo)
-  const slipLabel = SLIP_LABELS[legCount] || `${legCount}-LEG`
+  const slipLabel = label ?? (SLIP_LABELS[legCount] || `${legCount}-LEG`)
 
   const probs        = picks.map(p => p.probability)
   const maxProb      = Math.max(...probs)

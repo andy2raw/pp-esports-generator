@@ -328,8 +328,20 @@ export default function App() {
     const byFade = [...underPool].sort((a, b) => (b.fadeStrength ?? 0) - (a.fadeStrength ?? 0))
     if (byFade.length < 6) return []
     const combos = []
-    for (let i = 0; i + 5 < byFade.length && combos.length < 3; i += 6) {
-      const picks = byFade.slice(i, i + 6)
+    const used = new Set()
+    while (combos.length < 3) {
+      const picks = []
+      const teamCounts = {}
+      for (const p of byFade) {
+        if (used.has(p.playerName)) continue
+        const team = p.team || ''
+        if ((teamCounts[team] ?? 0) >= 2) continue
+        picks.push(p)
+        teamCounts[team] = (teamCounts[team] ?? 0) + 1
+        if (picks.length === 6) break
+      }
+      if (picks.length < 6) break
+      picks.forEach(p => used.add(p.playerName))
       const jointProb = picks.reduce((acc, p) => acc * p.probability, 1)
       const ev = calcEV(Math.pow(jointProb, 1 / 6), 6, 0)
       combos.push({ picks, ev, jointProb, goblinCount: 0 })
@@ -709,6 +721,7 @@ export default function App() {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
                       {underCombos6.map((c, i) => (
                         <SlipCard key={`u6-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
+                          label="UNDERS 6-LEG"
                           onTrack={() => addSlip(c, 'Unders 6-Leg', league)} />
                       ))}
                     </div>
