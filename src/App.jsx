@@ -42,6 +42,16 @@ function typicalAvg(league, statType) {
   if (st.includes('headshot')) {
     if (g === 'CS2' || g === 'CSGO') return is12 ? 14 : 8
   }
+  if (st.includes('death')) {
+    if (g === 'CS2' || g === 'CSGO') return is12 ? 24 : 13
+  }
+  if (st.includes('assist')) {
+    if (g === 'CS2' || g === 'CSGO') return is12 ? 7 : 4
+    if (g === 'LOL')                  return is12 ? 14 : 8
+  }
+  if (st.includes('adr') || st.includes('damage per round')) {
+    if (g === 'CS2' || g === 'CSGO') return is12 ? 140 : 75
+  }
   if (st.includes('last hit')) {
     if (g === 'DOTA2') return 150
   }
@@ -201,14 +211,16 @@ export default function App() {
 
   const lotteryPool = useMemo(() => scoredSort(resolvedSlipPool), [resolvedSlipPool])
 
-  // Under pool: single-player esports props only, line ≥20% above typical avg.
-  // Combo props ("+", "&" in player name) are excluded — their summed lines
-  // inflate ratios and push everything to the 0.82 cap.
+  // Under pool: filtered by the active league tab so CSGO tab → CSGO props only, etc.
+  // Combo props ("+", "&") excluded — their summed lines inflate ratios.
   // underProb = min(0.82, 0.50 + (ratio-1.20)*0.75).
   // fadeStrength is stored as integer % (e.g., 31 → "31% ABOVE AVG").
   const underPool = useMemo(() => {
+    const source = league === 'ALL'
+      ? esportsProjections
+      : esportsProjections.filter(p => inLeague(p, league))
     const qualified = []
-    for (const p of esportsProjections) {
+    for (const p of source) {
       // Skip combo/multi-player props
       if (p.playerName.includes('+') || p.playerName.includes('&')) continue
       const typical = typicalAvg(p.league, p.statType)
@@ -221,7 +233,7 @@ export default function App() {
       qualified.push({ ...p, overUnder: 'UNDER', probability: underProb, sharp: false, fadeStrength })
     }
     return scoredSort(qualified)
-  }, [esportsProjections])
+  }, [esportsProjections, league])
 
   const underRaw = useMemo(() => {
     if (underPool.length < 2) return { u2: [], u3: [], u4: [] }
