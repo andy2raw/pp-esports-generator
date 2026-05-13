@@ -241,6 +241,11 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
                     {p.marketLines.fd != null && ` · FD O${p.marketLines.fd}`}
                   </span>
                 )}
+                {p.opponent && (
+                  <span style={{ fontSize: 9, color: '#555', fontStyle: 'italic', width: '100%', marginTop: 2 }}>
+                    vs {p.opponent}
+                  </span>
+                )}
               </div>
               <span style={{
                 fontSize: 11, fontWeight: 700, flexShrink: 0, marginLeft: 8, minWidth: 52, textAlign: 'right',

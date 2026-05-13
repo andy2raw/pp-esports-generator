@@ -785,7 +785,7 @@ export default function App() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid #2a2a2a' }}>
-                        {['Player', 'Team', 'League', 'Stat', 'Line', 'Rec', 'Stats', 'Hit Prob', '2-Leg EV', '4-Leg EV'].map(h => (
+                        {['Player', 'Team', 'Opponent', 'League', 'Stat', 'Line', 'Rec', 'Stats', 'Hit Prob', '2-Leg EV', '4-Leg EV'].map(h => (
                           <th key={h} style={{ padding: '8px 10px', textAlign: 'left', color: '#555', fontWeight: 600, fontSize: 10, letterSpacing: 0.5, whiteSpace: 'nowrap' }}>
                             {h}
                           </th>
@@ -816,6 +816,9 @@ export default function App() {
                               )}
                             </td>
                             <td style={{ padding: '9px 10px', color: '#888', whiteSpace: 'nowrap' }}>{p.team || '—'}</td>
+                            <td style={{ padding: '9px 10px', color: '#666', fontSize: 10, fontStyle: 'italic', whiteSpace: 'nowrap' }}>
+                              {p.opponent ? `vs ${p.opponent}` : '—'}
+                            </td>
                             <td style={{ padding: '9px 10px', color: '#666', fontSize: 10 }}>{p.league}</td>
                             <td style={{ padding: '9px 10px', color: '#aaa', whiteSpace: 'nowrap' }}>{p.statType}</td>
                             <td style={{ padding: '9px 10px', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>

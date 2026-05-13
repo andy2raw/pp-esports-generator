@@ -84,10 +84,27 @@ export function usePrizePicks() {
 
           const line = parseFloat(a.line_score) || 0
 
+          const gameRef  = p.relationships?.new_game?.data
+          const game     = gameRef ? inc?.new_game?.[gameRef.id] : null
+          const homeTeam = game?.attributes?.home_team_name || game?.attributes?.home_team || ''
+          const awayTeam = game?.attributes?.away_team_name || game?.attributes?.away_team || ''
+          const myTeam   = (player?.attributes?.team_name || '').toLowerCase()
+          let opponent = ''
+          if (homeTeam && awayTeam) {
+            opponent = myTeam === homeTeam.toLowerCase() ? awayTeam : homeTeam
+          }
+
+          // Log the first game object once so we can verify field names
+          if (!inc.__gameLogged && game) {
+            console.log('[pp-game] sample new_game attributes:', game.attributes)
+            inc.__gameLogged = true
+          }
+
           return {
             id: p.id,
             playerName: player?.attributes?.display_name || a.description || 'Unknown',
             team: player?.attributes?.team_name || player?.attributes?.team || '',
+            opponent,
             position: player?.attributes?.position || '',
             league,
             statType: a.stat_type || '',
@@ -106,7 +123,7 @@ export function usePrizePicks() {
       // only keep the goblin version when no standard line exists.
       const seen = new Map()
       for (const p of parsed) {
-        const key = `${p.playerName}::${p.statType}`
+        const key = `${p.playerName}::${p.statType}::${p.opponent || ''}`
         const existing = seen.get(key)
         if (!existing) {
           seen.set(key, p)
