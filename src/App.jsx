@@ -225,21 +225,45 @@ export default function App() {
 
   const underRaw = useMemo(() => {
     if (underPool.length < 2) return { u2: [], u3: [], u4: [] }
+
     function makeCombo(picks) {
-      const jointProb = picks.reduce((acc, p) => acc * p.probability, 1)
-      const ev = calcEV(Math.pow(jointProb, 1 / picks.length), picks.length, 0)
-      return { picks, ev, jointProb, goblinCount: 0 }
+      // Highest fade strength first within the combo
+      const sorted = [...picks].sort((a, b) => (b.fadeStrength ?? 0) - (a.fadeStrength ?? 0))
+      const jointProb = sorted.reduce((acc, p) => acc * p.probability, 1)
+      const ev = calcEV(Math.pow(jointProb, 1 / sorted.length), sorted.length, 0)
+      return { picks: sorted, ev, jointProb, goblinCount: 0 }
     }
-    const top = underPool.slice(0, 12)
-    const u2 = []
-    for (let i = 0; i + 1 < top.length && u2.length < 3; i += 2)
-      u2.push(makeCombo([top[i], top[i + 1]]))
-    const u3 = []
-    for (let i = 0; i + 2 < top.length && u3.length < 3; i += 3)
-      u3.push(makeCombo([top[i], top[i + 1], top[i + 2]]))
-    const u4 = []
-    for (let i = 0; i + 3 < top.length && u4.length < 3; i += 4)
-      u4.push(makeCombo([top[i], top[i + 1], top[i + 2], top[i + 3]]))
+
+    // Greedy team-aware builder.
+    // maxPerTeam: max players from one team in a single combo.
+    // minTeams:   minimum distinct teams required (ensures cross-game coverage).
+    function buildCombos(pool, legCount, limit, maxPerTeam, minTeams) {
+      const combos = []
+      const used = new Set()
+      while (combos.length < limit) {
+        const picks = []
+        const teamCounts = {}
+        for (const p of pool) {
+          if (used.has(p.playerName)) continue
+          const team = p.team || `__solo_${p.playerName}`
+          if ((teamCounts[team] ?? 0) >= maxPerTeam) continue
+          picks.push(p)
+          teamCounts[team] = (teamCounts[team] ?? 0) + 1
+          if (picks.length === legCount) break
+        }
+        if (picks.length < legCount) break
+        const teamSet = new Set(picks.map(p => p.team || `__solo_${p.playerName}`))
+        if (teamSet.size < minTeams) break
+        picks.forEach(p => used.add(p.playerName))
+        combos.push(makeCombo(picks))
+      }
+      return combos
+    }
+
+    const pool = underPool.slice(0, 20)
+    const u2 = buildCombos(pool, 2, 3, 1, 2) // max 1/team, min 2 teams
+    const u3 = buildCombos(pool, 3, 3, 2, 2) // max 2/team, min 2 teams
+    const u4 = buildCombos(pool, 4, 3, 2, 3) // max 2/team, min 3 teams
     console.log('[underRaw] pool:', underPool.length, 'u2:', u2.length, 'u3:', u3.length, 'u4:', u4.length)
     return { u2, u3, u4 }
   }, [underPool])
@@ -328,7 +352,6 @@ export default function App() {
 
   const under6Raw = useMemo(() => {
     const byFade = [...underPool].sort((a, b) => (b.fadeStrength ?? 0) - (a.fadeStrength ?? 0))
-    if (byFade.length < 6) return []
     const combos = []
     const used = new Set()
     while (combos.length < 3) {
@@ -336,17 +359,21 @@ export default function App() {
       const teamCounts = {}
       for (const p of byFade) {
         if (used.has(p.playerName)) continue
-        const team = p.team || ''
+        const team = p.team || `__solo_${p.playerName}`
         if ((teamCounts[team] ?? 0) >= 2) continue
         picks.push(p)
         teamCounts[team] = (teamCounts[team] ?? 0) + 1
         if (picks.length === 6) break
       }
       if (picks.length < 6) break
+      const teamSet = new Set(picks.map(p => p.team || `__solo_${p.playerName}`))
+      if (teamSet.size < 4) break  // require at least 4 different teams
       picks.forEach(p => used.add(p.playerName))
-      const jointProb = picks.reduce((acc, p) => acc * p.probability, 1)
+      // Sort highest fade strength first within combo
+      const sorted = [...picks].sort((a, b) => (b.fadeStrength ?? 0) - (a.fadeStrength ?? 0))
+      const jointProb = sorted.reduce((acc, p) => acc * p.probability, 1)
       const ev = calcEV(Math.pow(jointProb, 1 / 6), 6, 0)
-      combos.push({ picks, ev, jointProb, goblinCount: 0 })
+      combos.push({ picks: sorted, ev, jointProb, goblinCount: 0 })
     }
     return combos
   }, [underPool])
@@ -668,7 +695,7 @@ export default function App() {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
                           {underCombos2.map((c, i) => (
                             <SlipCard key={`u2-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
-                              onTrack={() => addSlip(c, 'Under Parlay 2-Leg', league)} />
+                              label="UNDERS 2-LEG" onTrack={() => addSlip(c, 'Under Parlay 2-Leg', league)} />
                           ))}
                         </div>
                       </div>
@@ -690,7 +717,7 @@ export default function App() {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
                           {underCombos3.map((c, i) => (
                             <SlipCard key={`u3-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
-                              onTrack={() => addSlip(c, 'Under Parlay 3-Leg', league)} />
+                              label="UNDERS 3-LEG" onTrack={() => addSlip(c, 'Under Parlay 3-Leg', league)} />
                           ))}
                         </div>
                       </div>
@@ -712,7 +739,7 @@ export default function App() {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
                           {underCombos4.map((c, i) => (
                             <SlipCard key={`u4-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
-                              onTrack={() => addSlip(c, 'Under Parlay 4-Leg', league)} />
+                              label="UNDERS 4-LEG" onTrack={() => addSlip(c, 'Under Parlay 4-Leg', league)} />
                           ))}
                         </div>
                       </div>

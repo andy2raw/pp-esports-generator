@@ -60,6 +60,7 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
   const legCount  = picks.length
   const isLottery = variant === 'lottery'
   const isCore4   = variant === 'core4'
+  const isFade    = Boolean(label?.toUpperCase().match(/UNDER|FADE/))
 
   const risk      = riskTier(jointProb)
   const corr      = correlationRating(picks)
@@ -71,12 +72,13 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
   const minProb      = Math.min(...probs)
   const hasDiversity = maxProb > minProb + 0.001
 
-  const borderColor = isLottery ? '#c9a84c' : isCore4 ? '#b8860b' : '#333'
-  const bgColor     = isLottery ? '#1f1c14' : isCore4 ? '#191506' : '#242424'
-  const accentColor = isLottery || isCore4 ? '#c9a84c' : '#888'
+  const borderColor = isFade ? '#0891b240' : isLottery ? '#c9a84c' : isCore4 ? '#b8860b' : '#333'
+  const bgColor     = isFade ? '#06111a'   : isLottery ? '#1f1c14' : isCore4 ? '#191506' : '#242424'
+  const accentColor = isFade ? '#06b6d4'   : isLottery || isCore4 ? '#c9a84c' : '#888'
 
-  const hrColor   = hitRateColor(jointProb)
+  const hrColor   = isFade ? '#22c55e' : hitRateColor(jointProb)
   const rankBadge = RANK_BADGES[rank] ?? null
+  const confLabel = isFade ? 'FADE CONFIRMED' : hitRateLabel(jointProb)
 
   // Shared small-badge style
   const pill = (bg, color, border) => ({
@@ -92,15 +94,18 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
       borderRadius: 10,
       padding: isCore4 ? '18px 20px' : '14px 16px',
       marginBottom: 12,
-      boxShadow: isLottery ? '0 0 12px #c9a84c22' : isCore4 ? '0 0 20px #b8860b33' : 'none',
+      boxShadow: isFade ? '0 0 12px #0891b222' : isLottery ? '0 0 12px #c9a84c22' : isCore4 ? '0 0 20px #b8860b33' : 'none',
     }}>
 
-      {/* ── Row 1: rank badge · slip title · correlation · risk ── */}
+      {/* ── Row 1: rank badge · fade badge · slip title · correlation · risk ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
         {rankBadge && (
           <span style={pill(rankBadge.bg, rankBadge.color, rankBadge.border)}>
             {rankBadge.text}
           </span>
+        )}
+        {isFade && (
+          <span style={pill('#0891b214', '#06b6d4', '#0891b255')}>FADE PLAY</span>
         )}
         <span style={{ fontSize: isCore4 ? 13 : 11, fontWeight: 700, letterSpacing: 1, color: accentColor }}>
           {isCore4 ? `★ ${slipLabel}` : slipLabel}
@@ -130,7 +135,7 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
             HIT RATE {fmtPct(jointProb)}
           </div>
           <div style={{ fontSize: 9, fontWeight: 700, color: hrColor, opacity: 0.75, letterSpacing: 0.5, marginTop: 3 }}>
-            {hitRateLabel(jointProb)}
+            {confLabel}
           </div>
         </div>
       </div>
