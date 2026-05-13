@@ -211,29 +211,31 @@ export default function App() {
 
   const lotteryPool = useMemo(() => scoredSort(resolvedSlipPool), [resolvedSlipPool])
 
-  // Under pool: filtered by the active league tab so CSGO tab → CSGO props only, etc.
-  // Combo props ("+", "&") excluded — their summed lines inflate ratios.
-  // underProb = min(0.82, 0.50 + (ratio-1.20)*0.75).
-  // fadeStrength is stored as integer % (e.g., 31 → "31% ABOVE AVG").
+  // Under pool: filtered by active league tab. fadeStrength is calculated from the
+  // player's personal last5Avg/seasonAvg when available; falls back to population
+  // typicalAvg only when PandaScore data hasn't loaded yet. getStatLine in the dep
+  // array causes the pool to recompute automatically as per-player stats stream in.
   const underPool = useMemo(() => {
-    const source = league === 'ALL'
+    const pool = league === 'ALL'
       ? esportsProjections
       : esportsProjections.filter(p => inLeague(p, league))
     const qualified = []
-    for (const p of source) {
-      // Skip combo/multi-player props
+    for (const p of pool) {
       if (p.playerName.includes('+') || p.playerName.includes('&')) continue
-      const typical = typicalAvg(p.league, p.statType)
-      if (typical == null) continue
-      const ratio = p.line / typical
-      if (ratio < 1.20) continue  // Not a strong enough fade
+      // Personal history takes precedence; population avg is the fallback.
+      const sl         = getStatLine(p.playerName, p.league, p.statType)
+      const playerAvg  = sl?.last5Avg ?? sl?.seasonAvg ?? null
+      const baseline   = playerAvg ?? typicalAvg(p.league, p.statType)
+      if (baseline == null) continue
+      const ratio = p.line / baseline
+      if (ratio < 1.20) continue  // line must be ≥20% above player's actual output
       const underProb    = Math.min(0.82, 0.50 + (ratio - 1.20) * 0.75)
       const fadeStrength = Math.round((ratio - 1) * 100)
-      console.log(`[under] "${p.playerName}" line=${p.line} typical=${typical} ratio=${ratio.toFixed(3)} → ${underProb.toFixed(3)}`)
+      console.log(`[under] "${p.playerName}" line=${p.line} baseline=${baseline.toFixed(1)}(${playerAvg != null ? 'personal' : 'typical'}) ratio=${ratio.toFixed(3)} fadeStrength=${fadeStrength}%`)
       qualified.push({ ...p, overUnder: 'UNDER', probability: underProb, sharp: false, fadeStrength })
     }
     return scoredSort(qualified)
-  }, [esportsProjections, league])
+  }, [esportsProjections, league, getStatLine])
 
   const underRaw = useMemo(() => {
     if (underPool.length < 2) return { u2: [], u3: [], u4: [] }
