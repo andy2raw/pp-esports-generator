@@ -33,6 +33,8 @@ function correlationFactor(picks) {
 const MAX_PLAYER_APPEARANCES = 2
 const MAX_GOBLINS = { 2: 1, 3: 1, 4: 2, 5: 2, 6: 2 }
 
+function isDemon(p) { return p.oddsType === 'demon' }
+
 // sharedAppearances allows coordinated rotation across multiple bestCombos calls
 // so no player appears more than MAX_PLAYER_APPEARANCES times across all slips.
 function pickResult(scored, limit, appearances) {
@@ -51,7 +53,11 @@ function pickResult(scored, limit, appearances) {
   return result
 }
 
-export function bestCombos(projections, legCount, limit = 5, sharedAppearances = null) {
+// constraints: { maxDemons, requireDiversity }
+//   maxDemons:       max demon picks allowed per combo (default unlimited)
+//   requireDiversity: at least 2 distinct statTypes OR 2 distinct leagues per combo
+export function bestCombos(projections, legCount, limit = 5, sharedAppearances = null, constraints = {}) {
+  const { maxDemons = Infinity, requireDiversity = false } = constraints
   if (projections.length < legCount) return []
 
   // Expanded to 50 for more variety
@@ -88,6 +94,10 @@ export function bestCombos(projections, legCount, limit = 5, sharedAppearances =
     return pickArrays
       .filter(isValidSlip)
       .filter(combo => combo.filter(p => p.oddsType === 'goblin').length <= maxGob)
+      .filter(combo => combo.filter(isDemon).length <= maxDemons)
+      .filter(combo => !requireDiversity ||
+        new Set(combo.map(p => p.statType)).size >= 2 ||
+        new Set(combo.map(p => p.league)).size >= 2)
       .map(combo => {
         const goblinCount = combo.filter(p => p.oddsType === 'goblin').length
         const jointProb   = combo.reduce((acc, p) => acc * p.probability, 1) * correlationFactor(combo)

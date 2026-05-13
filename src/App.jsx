@@ -271,9 +271,13 @@ export default function App() {
   //    Core 4-Leg gets first pick (flagship), then 2-leg, 3-leg, lottery.
   const allRaw = useMemo(() => {
     const appearances = {}
-    const c4      = bestCombos(slipPool, 4, 3, appearances)
-    const c2      = bestCombos(slipPool, 2, 3, appearances)
-    const c3      = bestCombos(slipPool, 3, 3, appearances)
+    // Core 4-leg: flagship — max 1 demon, require stat/league diversity
+    const c4      = bestCombos(slipPool, 4, 3, appearances, { maxDemons: 1, requireDiversity: true })
+    // Precision 2-leg: no demons ever
+    const c2      = bestCombos(slipPool, 2, 3, appearances, { maxDemons: 0 })
+    // Edge 3-leg: max 1 demon
+    const c3      = bestCombos(slipPool, 3, 3, appearances, { maxDemons: 1 })
+    // Lottery 6-leg: high-variance slip — no demon constraint
     const lottery = bestCombos(lotteryPool, 6, 1, appearances)[0] ?? null
     return { c2, c3, c4, lottery }
   }, [slipPool, lotteryPool])
