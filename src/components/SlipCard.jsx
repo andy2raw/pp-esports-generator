@@ -1,4 +1,4 @@
-import { fmtPct, fmtEV, probColor, isLock, isGoblin } from '../utils/ev.js'
+import { fmtPct, probColor, isLock, isGoblin } from '../utils/ev.js'
 
 const SLIP_LABELS = { 2: 'PRECISION 2-LEG', 3: 'EDGE 3-LEG', 4: 'CORE 4-LEG', 6: 'LOTTERY 6-LEG' }
 
@@ -35,8 +35,27 @@ function whySelected({ picks, goblinCount }) {
   return 'Selected for highest joint probability available today.'
 }
 
+function hitRateColor(r) {
+  if (r >= 0.70) return '#22c55e'
+  if (r >= 0.50) return '#eab308'
+  return '#ef4444'
+}
+
+function hitRateLabel(r) {
+  if (r >= 0.70) return 'HIGH CONFIDENCE'
+  if (r >= 0.55) return 'SOLID'
+  if (r >= 0.40) return 'MODERATE'
+  return 'SPECULATIVE'
+}
+
+const RANK_BADGES = {
+  1: { text: '🥇 BEST', color: '#f59e0b', bg: '#f59e0b14', border: '#f59e0b55' },
+  2: { text: '#2',      color: '#9ca3af', bg: '#9ca3af14', border: '#9ca3af55' },
+  3: { text: '#3',      color: '#b45309', bg: '#b4530914', border: '#b4530955' },
+}
+
 export default function SlipCard({ combo, rank, variant, confidence, onTrack, label }) {
-  const { picks, ev, jointProb, goblinCount } = combo
+  const { picks, jointProb, goblinCount } = combo
   const legCount  = picks.length
   const isLottery = variant === 'lottery'
   const isCore4   = variant === 'core4'
@@ -55,6 +74,9 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
   const bgColor     = isLottery ? '#1f1c14' : isCore4 ? '#191506' : '#242424'
   const accentColor = isLottery || isCore4 ? '#c9a84c' : '#888'
 
+  const hrColor  = hitRateColor(jointProb)
+  const rankBadge = RANK_BADGES[rank] ?? null
+
   return (
     <div style={{
       background: bgColor,
@@ -66,10 +88,23 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
     }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <span style={{ fontSize: isCore4 ? 13 : 11, fontWeight: 700, letterSpacing: 1, color: accentColor }}>
-          {isCore4 ? `★ ${slipLabel}  #${rank}` : isLottery ? slipLabel : `#${rank} — ${slipLabel}`}
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        {/* Left: rank badge + slip label */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: 1 }}>
+          {rankBadge && (
+            <span style={{
+              fontSize: 9, fontWeight: 800, letterSpacing: 0.4, flexShrink: 0,
+              color: rankBadge.color, background: rankBadge.bg,
+              border: `1px solid ${rankBadge.border}`,
+              borderRadius: 4, padding: '2px 6px',
+            }}>{rankBadge.text}</span>
+          )}
+          <span style={{ fontSize: isCore4 ? 13 : 11, fontWeight: 700, letterSpacing: 1, color: accentColor }}>
+            {isCore4 ? `★ ${slipLabel}` : slipLabel}
+          </span>
+        </div>
+
+        {/* Right: correlation, risk, conf, hit rate */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
           {/* Correlation */}
           <span style={{
             fontSize: 9, fontWeight: 700, letterSpacing: 0.3,
@@ -84,7 +119,7 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
             borderRadius: 4, padding: '2px 6px',
           }}>{risk.label}</span>
 
-          {/* Confidence */}
+          {/* Confidence score */}
           {confidence != null && (
             <div style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -100,13 +135,15 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
             </div>
           )}
 
-          {/* EV */}
-          <span style={{
-            fontSize: 13, fontWeight: 700,
-            color: ev >= 0 ? 'var(--green)' : isLottery ? '#c9a84c' : 'var(--red)',
-          }}>
-            EV {fmtEV(ev)}
-          </span>
+          {/* Hit Rate */}
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: hrColor, lineHeight: 1 }}>
+              HIT RATE {fmtPct(jointProb)}
+            </div>
+            <div style={{ fontSize: 8, fontWeight: 700, color: hrColor, opacity: 0.75, letterSpacing: 0.4, marginTop: 2 }}>
+              {hitRateLabel(jointProb)}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -115,15 +152,14 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
         {whyLine}
       </p>
 
-      {/* Joint prob + goblin count */}
-      <div style={{ fontSize: 11, color: '#777', marginBottom: 8 }}>
-        Joint prob: {fmtPct(jointProb)}
-        {goblinCount > 0 && (
-          <span style={{ marginLeft: 6, color: '#f59e0b', fontWeight: 600 }}>
+      {/* Goblin count */}
+      {goblinCount > 0 && (
+        <div style={{ fontSize: 11, color: '#777', marginBottom: 8 }}>
+          <span style={{ color: '#f59e0b', fontWeight: 600 }}>
             {goblinCount} goblin{goblinCount > 1 ? 's' : ''}
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Track button */}
       {onTrack && (
@@ -189,14 +225,11 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
                 <span style={{ fontSize: 10, color: '#888' }}>
                   {p.statType} O{p.line}
                 </span>
-                {/* Fade strength — shown on UNDER PARLAY picks */}
                 {p.fadeStrength != null && (
                   <span style={{
-                    fontSize: 8, fontWeight: 700, color: '#ef444499',
-                    letterSpacing: 0.4,
+                    fontSize: 8, fontWeight: 700, color: '#ef444499', letterSpacing: 0.4,
                   }}>LINE {p.fadeStrength}% ABOVE AVG</span>
                 )}
-                {/* OVER/UNDER recommendation */}
                 {p.overUnder && (
                   <span style={{
                     fontSize: 9, fontWeight: 700,
@@ -206,7 +239,6 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
                     borderRadius: 3, padding: '1px 4px',
                   }}>{p.overUnder}</span>
                 )}
-                {/* Market line comparison — shows when Odds API data is available */}
                 {p.sharpValue && (
                   <span style={{
                     fontSize: 9, fontWeight: 700,

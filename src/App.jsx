@@ -283,25 +283,23 @@ export default function App() {
   }, [slipPool, lotteryPool])
 
   // Attach confidence scores and OVER/UNDER to each combo's picks.
+  // Sort by jointProb descending so rank 1 = best hit rate.
   const combos2 = useMemo(
-    () => allRaw.c2.map(c => ({
-      ...withOverUnder(c, getStatLine),
-      confidence: calcConfidence(c, getStatLine, playerHistory),
-    })),
+    () => allRaw.c2
+      .map(c => ({ ...withOverUnder(c, getStatLine), confidence: calcConfidence(c, getStatLine, playerHistory) }))
+      .sort((a, b) => b.jointProb - a.jointProb),
     [allRaw.c2, getStatLine, playerHistory],
   )
   const combos3 = useMemo(
-    () => allRaw.c3.map(c => ({
-      ...withOverUnder(c, getStatLine),
-      confidence: calcConfidence(c, getStatLine, playerHistory),
-    })),
+    () => allRaw.c3
+      .map(c => ({ ...withOverUnder(c, getStatLine), confidence: calcConfidence(c, getStatLine, playerHistory) }))
+      .sort((a, b) => b.jointProb - a.jointProb),
     [allRaw.c3, getStatLine, playerHistory],
   )
   const combos4 = useMemo(
-    () => allRaw.c4.map(c => ({
-      ...withOverUnder(c, getStatLine),
-      confidence: calcConfidence(c, getStatLine, playerHistory),
-    })),
+    () => allRaw.c4
+      .map(c => ({ ...withOverUnder(c, getStatLine), confidence: calcConfidence(c, getStatLine, playerHistory) }))
+      .sort((a, b) => b.jointProb - a.jointProb),
     [allRaw.c4, getStatLine, playerHistory],
   )
   const lotterySlip = useMemo(
