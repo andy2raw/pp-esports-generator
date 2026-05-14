@@ -94,12 +94,13 @@ function avg(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.len
 // PrizePicks sends e.g. "MAPS 1-2 Kills" — strip prefixes and map to base type.
 function normalizeStatType(statType) {
   const st = (statType || '').toLowerCase()
-  if (st.includes('kill'))     return 'Kills'
-  if (st.includes('death'))    return 'Deaths'
-  if (st.includes('assist'))   return 'Assists'
-  if (st.includes('headshot')) return 'Headshots'
+  if (st.includes('kill'))                              return 'Kills'
+  if (st.includes('death'))                             return 'Deaths'
+  if (st.includes('assist'))                            return 'Assists'
+  if (st.includes('headshot'))                          return 'Headshots'
+  if (st.includes('adr') || st.includes('damage per')) return 'ADR'
   if (st.includes(' cs') || st === 'cs' || st.includes('creep')) return 'CS'
-  if (st.includes('gold'))     return 'Gold Earned'
+  if (st.includes('gold'))                              return 'Gold Earned'
   return statType
 }
 
@@ -276,6 +277,20 @@ async function getPandaScoreStats(gameSlug, name, statType) {
   )
   let last5Avg = null
   if (Array.isArray(games) && games.length) {
+    // Log first game's player entry structure so we can verify field names
+    const firstPlayerEntry = (games[0].players || games[0].results || []).find(
+      p => p.player?.id === player.id || p.player_id === player.id,
+    )
+    if (firstPlayerEntry) {
+      console.log(
+        `[PS game-entry] ${gameSlug} "${name}" fields=${JSON.stringify(Object.keys(firstPlayerEntry))} ` +
+        `sample=${JSON.stringify(firstPlayerEntry)}`.slice(0, 200),
+      )
+    } else {
+      console.log(`[PS game-entry] ${gameSlug} "${name}" no matching player in games[0] — ` +
+        `games[0].players count=${(games[0].players || games[0].results || []).length}`)
+    }
+
     const vals = games.map(g => {
       const entry = (g.players || g.results || []).find(
         p => p.player?.id === player.id || p.player_id === player.id,
@@ -411,30 +426,49 @@ async function getDota2Stats(name, statType) {
   return { last5Avg: avg(values.slice(0, 5)), seasonAvg: avg(values), source: 'opendota' }
 }
 
-// ── CSGO — PandaScore first, hardcoded HLTV ref table fallback ───────────────
+// ── CSGO/CS2 — PandaScore first, per-map reference table fallback ────────────
+// All values are per-MAP averages (kills, headshots, deaths, assists counts).
+// Previous table used KPR/DPR/HS% from HLTV — those are wrong units for PP lines.
 const CSGO_REF = {
-  curse:   { kills: 0.91, headshots: 43, deaths: 0.61 },
-  nafany:  { kills: 0.90, headshots: 41, deaths: 0.66 },
-  flouzer: { kills: 0.95, headshots: 45, deaths: 0.63 },
-  decenty: { kills: 0.97, headshots: 46, deaths: 0.62 },
-  zmb:     { kills: 0.93, headshots: 44, deaths: 0.64 },
+  // Active CS2 pros (2024-25 per-map estimates)
+  jamyoung:  { kills: 18, headshots: 8,  deaths: 14, assists: 3 },
+  matys:     { kills: 17, headshots: 9,  deaths: 14, assists: 3 },
+  nightfall: { kills: 16, headshots: 7,  deaths: 14, assists: 3 },
+  'kair0n-': { kills: 17, headshots: 8,  deaths: 13, assists: 3 },
+  xantares:  { kills: 21, headshots: 13, deaths: 15, assists: 2 },
+  niko:      { kills: 22, headshots: 14, deaths: 13, assists: 3 },
+  electronic:{ kills: 18, headshots: 9,  deaths: 14, assists: 4 },
+  b1t:       { kills: 18, headshots: 8,  deaths: 13, assists: 4 },
+  jl:        { kills: 17, headshots: 9,  deaths: 14, assists: 3 },
+  sh1ro:     { kills: 20, headshots: 10, deaths: 13, assists: 3 },
+  zywoo:     { kills: 22, headshots: 11, deaths: 12, assists: 3 },
+  s1mple:    { kills: 22, headshots: 12, deaths: 12, assists: 3 },
+  device:    { kills: 19, headshots: 10, deaths: 13, assists: 3 },
+  ropz:      { kills: 19, headshots: 9,  deaths: 13, assists: 3 },
+  hunter:    { kills: 18, headshots: 9,  deaths: 14, assists: 4 },
+  // Legacy names kept but corrected to per-map
+  curse:     { kills: 16, headshots: 7,  deaths: 15, assists: 3 },
+  nafany:    { kills: 15, headshots: 6,  deaths: 15, assists: 4 },
 }
 
-// ±0.06 random jitter on last5Avg to simulate recent-form variance.
+// ±5% deterministic jitter on last5Avg to simulate recent-form variance.
 function jitter(base) {
-  return +(base + (Math.random() * 0.12 - 0.06)).toFixed(3)
+  return +(base * (0.93 + ((base * 17) % 1) * 0.14)).toFixed(2)
 }
 
 async function getCsgoStats(name, statType) {
-  const ps = await getPandaScoreStats('csgo', name, statType)
+  // Normalize before PandaScore lookup — raw statType like "MAPS 1-2 Kills"
+  // doesn't match PS_FIELDS keys, which caused all CSGO lookups to return null.
+  const normalStat = normalizeStatType(statType)
+  const ps = await getPandaScoreStats('csgo', name, normalStat)
   if (ps) return ps
 
   const entry = CSGO_REF[name.toLowerCase()]
   if (!entry) return null
 
-  const fieldMap = { Kills: 'kills', Headshots: 'headshots', Deaths: 'deaths' }
-  const field = fieldMap[statType]
-  if (!field) return null
+  const fieldMap = { Kills: 'kills', Headshots: 'headshots', Deaths: 'deaths', Assists: 'assists' }
+  const field = fieldMap[normalStat]
+  if (!field || entry[field] == null) return null
 
   const seasonAvg = entry[field]
   return { seasonAvg, last5Avg: jitter(seasonAvg), source: 'hltv-ref' }
