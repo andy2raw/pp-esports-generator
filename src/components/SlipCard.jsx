@@ -221,7 +221,7 @@ export default function SlipCard({ combo, rank, variant, confidence, onTrack, la
                 {p.fadeStrength != null && (
                   <span style={{
                     fontSize: 8, fontWeight: 700, color: '#ef444499', letterSpacing: 0.4,
-                  }}>LINE {p.fadeStrength}% ABOVE AVG</span>
+                  }}>LINE {((p.fadeStrength / 100) + 1).toFixed(1)}x AVG</span>
                 )}
                 {p.overUnder && (
                   <span style={{

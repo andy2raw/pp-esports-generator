@@ -229,9 +229,10 @@ export default function App() {
       if (baseline == null) continue
       const ratio = p.line / baseline
       if (ratio < 1.20) continue  // line must be ≥20% above player's actual output
+      if (ratio > 3.00) { console.log(`[under] SKIP ratio too high "${p.playerName}" line=${p.line} baseline=${baseline.toFixed(1)} ratio=${ratio.toFixed(2)}`); continue }
       const underProb    = Math.min(0.82, 0.50 + (ratio - 1.20) * 0.75)
       const fadeStrength = Math.round((ratio - 1) * 100)
-      console.log(`[under] "${p.playerName}" line=${p.line} baseline=${baseline.toFixed(1)}(${playerAvg != null ? 'personal' : 'typical'}) ratio=${ratio.toFixed(3)} fadeStrength=${fadeStrength}%`)
+      console.log(`[under] "${p.playerName}" line=${p.line} baseline=${baseline.toFixed(1)}(${playerAvg != null ? 'personal' : 'typical'}) ratio=${ratio.toFixed(2)} → ${((ratio).toFixed(1))}x AVG`)
       qualified.push({ ...p, overUnder: 'UNDER', probability: underProb, sharp: false, fadeStrength })
     }
     return scoredSort(qualified)
