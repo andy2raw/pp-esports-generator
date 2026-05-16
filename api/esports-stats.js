@@ -532,6 +532,8 @@ async function getValStats(name, statType) {
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
+  const keyPreview = (process.env.PANDASCORE_KEY || '').slice(0, 8);
+  console.log('[DIAG] PANDASCORE_KEY preview:', keyPreview || 'EMPTY');
   runDiagnostic() // no await — fires in background, doesn't block response
 
   const { name, game, statType, line: lineStr } = req.query || {}
