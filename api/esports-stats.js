@@ -211,6 +211,10 @@ const PS_FIELDS = {
   Deaths:    ['deaths'],
   Assists:   ['assists'],
   Headshots: ['headshots'],
+  kills:      ['kills'],
+  deaths:     ['deaths'],
+  assists:    ['assists'],
+  headshots:  ['headshots'],
 }
 
 // Dedicated search that always logs [PS result] with HTTP status + count.
