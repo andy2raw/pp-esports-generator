@@ -30,7 +30,7 @@ function inLeague(p, selected) {
 // stats are available. MLB is excluded — it uses real stats only.
 // All values are per-map/per-game counts (NOT per-round rates).
 // Multi-map variants scale by map count; ADR is a per-round rate so never scales.
-function typicalAvg(league, statType) {
+function typicalAvg(league, statType, maps = 1) {
   const g  = (league || '').toUpperCase()
   const st = (statType || '').toLowerCase()
   if (g === 'MLB') return null
@@ -76,7 +76,7 @@ function typicalAvg(league, statType) {
 // per-map totals. If real data is < 35% of typical it's the wrong unit — use typical.
 function resolveOverUnder(statLine, league, statType, line, currentProb) {
   const realLambda = statLine?.last5Avg ?? statLine?.seasonAvg
-  const typical    = typicalAvg(league, statType)
+  const typical    = typicalAvg(league, statType, statLine?.maps ?? 1)
 
   let lambda
   if (realLambda != null && realLambda > 0) {
@@ -194,7 +194,7 @@ export default function App() {
     })
     const typical10 = resolved.slice(0, 10)
     typical10.forEach(p => {
-      const typical = typicalAvg(p.league, p.statType)
+      const typical = typicalAvg(p.league, p.statType, p.maps ?? 1)
       console.log(`[ou] ${p.league} "${p.playerName}" line=${p.line} typical=${typical ?? 'n/a'} → ${p.overUnder} ${p.probability.toFixed(3)}`)
     })
     return resolved
@@ -238,7 +238,7 @@ export default function App() {
       // Personal history takes precedence; population avg is the fallback.
       const sl         = getStatLine(p.playerName, p.league, p.statType)
       const playerAvg  = sl?.last5Avg ?? sl?.seasonAvg ?? null
-      const baseline   = playerAvg ?? typicalAvg(p.league, p.statType)
+      const baseline   = playerAvg ?? typicalAvg(p.league, p.statType, p.maps ?? 1)
       if (baseline == null) continue
       const ratio = p.line / baseline
       if (ratio < 1.20) continue  // line must be ≥20% above player's actual output
