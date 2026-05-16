@@ -19,6 +19,24 @@ const MLB_STAT_MAP = {
 
 function avg(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null }
 
+function _logFactorial(n) {
+  if (n <= 1) return 0
+  let r = 0
+  for (let i = 2; i <= n; i++) r += Math.log(i)
+  return r
+}
+function _poissonP(lambda, k) {
+  if (lambda <= 0) return 0
+  return Math.exp(-lambda + k * Math.log(lambda) - _logFactorial(k))
+}
+function _poissonCDF(lambda, k) {
+  let c = 0
+  for (let i = 0; i <= Math.floor(k); i++) c += _poissonP(lambda, i)
+  return Math.min(c, 1)
+}
+function poissonOverProb(lambda, line) { return 1 - _poissonCDF(lambda, Math.floor(line)) }
+function poissonUnderProb(lambda, line) { return _poissonCDF(lambda, Math.floor(line)) }
+
 async function safeFetch(url) {
   try {
     const controller = new AbortController()
@@ -51,12 +69,16 @@ async function searchPlayer(name) {
 function calcProb(line, l5Avg, seasonAvg) {
   if (!line || line <= 0) return { prob: 0.54, sharp: false }
   if (l5Avg == null && seasonAvg == null) return { prob: 0.54, sharp: false }
-  const ref = (l5Avg != null && seasonAvg != null)
+  const lambda = (l5Avg != null && seasonAvg != null)
     ? l5Avg * 0.6 + seasonAvg * 0.4
     : (l5Avg ?? seasonAvg)
-  const ratio = ref / line
-  const raw = 0.50 + (ratio - 1) * 0.28
-  return { prob: Math.max(0.35, Math.min(0.92, raw)), sharp: ratio >= 2.0 }
+  const overProb  = poissonOverProb(lambda, line)
+  const underProb = poissonUnderProb(lambda, line)
+  const direction = overProb >= underProb ? 'OVER' : 'UNDER'
+  const prob = Math.max(0.35, Math.min(0.92, direction === 'OVER' ? overProb : underProb))
+  const sharp = lambda >= line * 2.0
+  console.log(`[poisson-mlb] lambda=${lambda.toFixed(3)} line=${line} direction=${direction} prob=${prob.toFixed(3)}`)
+  return { prob, sharp }
 }
 
 export default async function handler(req, res) {

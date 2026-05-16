@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { poissonOverProb, poissonUnderProb } from './utils/poisson.js'
 import { usePrizePicks } from './hooks/usePrizePicks.js'
 import { usePandaScore } from './hooks/usePandaScore.js'
 import { useSlipTracker } from './hooks/useSlipTracker.js'
@@ -62,34 +63,23 @@ function typicalAvg(league, statType) {
 }
 
 // Resolve OVER/UNDER direction, probability, and sharp flag for a single prop.
-// When L5/season stats exist: compare to line directly.
-// When stats are null: compare line to game/stat typical average.
+// Uses Poisson distribution with lambda = player's L5 avg, season avg, or typical avg.
 function resolveOverUnder(statLine, league, statType, line, currentProb) {
-  const l5 = statLine?.last5Avg ?? statLine?.seasonAvg
+  const lambda = statLine?.last5Avg ?? statLine?.seasonAvg ?? typicalAvg(league, statType)
 
-  if (l5 != null) {
-    return {
-      overUnder:   l5 > line ? 'OVER' : 'UNDER',
-      probability: currentProb,
-      sharp:       statLine?.sharp ?? false,
-    }
+  if (!lambda || lambda <= 0) {
+    return { overUnder: 'OVER', probability: 0.55, sharp: false }
   }
 
-  // No player stats — fall back to typical averages (esports only; MLB returns null)
-  const typical = typicalAvg(league, statType)
-  if (typical == null) return { overUnder: 'OVER', probability: currentProb, sharp: false }
+  const overProb = poissonOverProb(lambda, line)
+  const underProb = poissonUnderProb(lambda, line)
+  const direction = overProb >= underProb ? 'OVER' : 'UNDER'
+  const probability = direction === 'OVER' ? overProb : underProb
+  const sharp = probability >= 0.72
 
-  const ratio = line / typical
-  if (ratio > 1.10) {
-    // Line is meaningfully above typical → lean UNDER; flip displayed probability
-    return { overUnder: 'UNDER', probability: Math.max(0.44, 1 - currentProb), sharp: false }
-  }
-  if (ratio < 0.90) {
-    // Line is meaningfully below typical → lean OVER
-    return { overUnder: 'OVER', probability: currentProb, sharp: false }
-  }
-  // Within 10% of typical → genuine toss-up
-  return { overUnder: line >= typical ? 'UNDER' : 'OVER', probability: 0.50, sharp: true }
+  console.log(`[poisson] lambda=${lambda.toFixed(2)} line=${line} direction=${direction} probability=${probability.toFixed(3)}`)
+
+  return { overUnder: direction, probability, sharp }
 }
 
 // Leagues used for esports slip generation — MLB and others are display-only.
@@ -230,7 +220,7 @@ export default function App() {
       const ratio = p.line / baseline
       if (ratio < 1.20) continue  // line must be ≥20% above player's actual output
       if (ratio > 3.00) { console.log(`[under] SKIP ratio too high "${p.playerName}" line=${p.line} baseline=${baseline.toFixed(1)} ratio=${ratio.toFixed(2)}`); continue }
-      const underProb    = Math.min(0.82, 0.50 + (ratio - 1.20) * 0.75)
+      const underProb    = poissonUnderProb(baseline, p.line)
       const fadeStrength = Math.round((ratio - 1) * 100)
       console.log(`[under] "${p.playerName}" line=${p.line} baseline=${baseline.toFixed(1)}(${playerAvg != null ? 'personal' : 'typical'}) ratio=${ratio.toFixed(2)} → ${((ratio).toFixed(1))}x AVG`)
       qualified.push({ ...p, overUnder: 'UNDER', probability: underProb, sharp: false, fadeStrength })
