@@ -28,6 +28,8 @@ function inLeague(p, selected) {
 
 // Typical averages per esports game/stat/map-count used as fallback when no player
 // stats are available. MLB is excluded — it uses real stats only.
+// All values are per-map/per-game counts (NOT per-round rates).
+// Multi-map variants scale by map count; ADR is a per-round rate so never scales.
 function typicalAvg(league, statType) {
   const g  = (league || '').toUpperCase()
   const st = (statType || '').toLowerCase()
@@ -36,25 +38,31 @@ function typicalAvg(league, statType) {
   const is13 = /1-3/i.test(st)
   if (st.includes('kill')) {
     if (g === 'CS2' || g === 'CSGO') return is13 ? 42 : is12 ? 28 : 16
-    if (g === 'LOL')                  return is13 ? 14 : is12 ? 10 : 6
-    if (g === 'VAL')                  return is12 ? 32 : 18
-    if (g === 'DOTA2')                return 10
-  }
-  if (st.includes('headshot')) {
-    if (g === 'CS2' || g === 'CSGO') return is12 ? 14 : 8
+    if (g === 'LOL')                  return is13 ? 18 : is12 ? 13 : 7
+    if (g === 'VAL')                  return is13 ? 45 : is12 ? 32 : 18
+    if (g === 'DOTA2')                return is13 ? 21 : is12 ? 16 : 8
   }
   if (st.includes('death')) {
-    if (g === 'CS2' || g === 'CSGO') return is12 ? 24 : 13
+    if (g === 'CS2' || g === 'CSGO') return is13 ? 36 : is12 ? 27 : 14
+    if (g === 'LOL')                  return is13 ? 11 : is12 ? 8 : 4
+    if (g === 'VAL')                  return is13 ? 39 : is12 ? 29 : 15
+    if (g === 'DOTA2')                return is13 ? 18 : is12 ? 13 : 7
   }
   if (st.includes('assist')) {
-    if (g === 'CS2' || g === 'CSGO') return is12 ? 7 : 4
-    if (g === 'LOL')                  return is12 ? 14 : 8
+    if (g === 'CS2' || g === 'CSGO') return is13 ? 10 : is12 ? 8 : 4
+    if (g === 'LOL')                  return is13 ? 25 : is12 ? 20 : 10
+    if (g === 'VAL')                  return is13 ? 16 : is12 ? 11 : 6
+    if (g === 'DOTA2')                return is13 ? 31 : is12 ? 23 : 12
+  }
+  if (st.includes('headshot')) {
+    if (g === 'CS2' || g === 'CSGO') return is13 ? 26 : is12 ? 18 : 10
   }
   if (st.includes('adr') || st.includes('damage per round')) {
-    if (g === 'CS2' || g === 'CSGO') return is12 ? 140 : 75
+    // ADR is already a per-round rate — does not scale with map count
+    if (g === 'CS2' || g === 'CSGO') return 75
   }
   if (st.includes('last hit')) {
-    if (g === 'DOTA2') return 150
+    if (g === 'DOTA2') return is12 ? 280 : 150
   }
   if (st === 'gpm' || st.includes('gold per min') || st.includes('gold/min')) {
     if (g === 'DOTA2') return 450
@@ -64,8 +72,23 @@ function typicalAvg(league, statType) {
 
 // Resolve OVER/UNDER direction, probability, and sharp flag for a single prop.
 // Uses Poisson distribution with lambda = player's L5 avg, season avg, or typical avg.
+// Guard: PandaScore sometimes returns per-round rates (KPR ≈ 0.65) instead of
+// per-map totals. If real data is < 35% of typical it's the wrong unit — use typical.
 function resolveOverUnder(statLine, league, statType, line, currentProb) {
-  const lambda = statLine?.last5Avg ?? statLine?.seasonAvg ?? typicalAvg(league, statType)
+  const realLambda = statLine?.last5Avg ?? statLine?.seasonAvg
+  const typical    = typicalAvg(league, statType)
+
+  let lambda
+  if (realLambda != null && realLambda > 0) {
+    if (typical == null || realLambda >= typical * 0.35) {
+      lambda = realLambda
+    } else {
+      console.warn(`[poisson] real lambda=${realLambda.toFixed(2)} < 35% of typical=${typical} — likely per-round units, using typical`)
+      lambda = typical
+    }
+  } else {
+    lambda = typical
+  }
 
   if (!lambda || lambda <= 0) {
     return { overUnder: 'OVER', probability: 0.55, sharp: false }
