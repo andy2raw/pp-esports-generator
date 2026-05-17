@@ -219,7 +219,7 @@ const PS_FIELDS = {
 
 // Dedicated search that always logs [PS result] with HTTP status + count.
 async function psSearch(gameSlug, name) {
-  const url = `https://api.pandascore.co/${gameSlug}/players?search[name]=${encodeURIComponent(name)}&per_page=5`
+  const url = `https://api.pandascore.co/${gameSlug}/players?search%5Bname%5D=${encodeURIComponent(name)}&per_page=5`
   try {
     const controller = new AbortController()
     const t = setTimeout(() => controller.abort(), 7000)
