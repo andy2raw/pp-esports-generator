@@ -254,6 +254,7 @@ async function getPandaScoreStats(gameSlug, name, statType) {
   const player =
     players.find(p => p.name?.toLowerCase() === nl) ||
     players.find(p => p.slug?.toLowerCase() === nl) ||
+    players.find(p => p.slug?.toLowerCase().includes(nl)) ||
     players.find(p => p.name?.toLowerCase().includes(nl)) ||
     players[0]
 
