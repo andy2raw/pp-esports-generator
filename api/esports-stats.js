@@ -535,7 +535,10 @@ export default async function handler(req, res) {
   const keyPreview = (process.env.PANDASCORE_KEY || '').slice(0, 8);
   console.log('[DIAG] PANDASCORE_KEY preview:', keyPreview || 'EMPTY');
   if (req.query.diag === '1') {
-    return res.json({ keyPreview: keyPreview || 'EMPTY', hasKey: !!process.env.PANDASCORE_KEY });
+    const testUrl = `https://api.pandascore.co/csgo/players?search%5Bname%5D=donk&per_page=3`;
+    const testRes = await fetch(testUrl, { headers: { Authorization: `Bearer ${process.env.PANDASCORE_KEY}` } });
+    const testData = await testRes.json().catch(() => 'parse error');
+    return res.json({ keyPreview: keyPreview || 'EMPTY', hasKey: !!process.env.PANDASCORE_KEY, psStatus: testRes.status, psData: testData });
   }
   runDiagnostic() // no await — fires in background, doesn't block response
 
