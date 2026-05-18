@@ -409,14 +409,12 @@ async function getDota2Stats(name, statType) {
   try {
     const st = (statType || '').toLowerCase()
     const field = st.includes('kill') ? 'kills' : st.includes('death') ? 'deaths' : st.includes('assist') ? 'assists' : 'kills'
-    const searchRes = await safeFetch('https://api.opendota.com/api/search?q=' + encodeURIComponent(name), { timeoutMs: 6000, headers: {} })
-    const players = searchRes?.ok ? await searchRes.json().catch(() => []) : []
+    const players = await safeFetch('https://api.opendota.com/api/search?q=' + encodeURIComponent(name), { timeoutMs: 6000, headers: {} })
     if (!Array.isArray(players) || !players.length) return null
     const nl = name.toLowerCase()
     const player = players.find(p => p.personaname?.toLowerCase() === nl) || players[0]
     if (!player?.account_id) return null
-    const matchRes = await safeFetch('https://api.opendota.com/api/players/' + player.account_id + '/recentMatches', { timeoutMs: 6000, headers: {} })
-    const matches = matchRes?.ok ? await matchRes.json().catch(() => []) : []
+    const matches = await safeFetch('https://api.opendota.com/api/players/' + player.account_id + '/recentMatches', { timeoutMs: 6000, headers: {} })
     if (!Array.isArray(matches) || !matches.length) return null
     const values = matches.slice(0, 10).map(m => m[field]).filter(v => typeof v === 'number')
     if (!values.length) return null
@@ -483,7 +481,13 @@ export default async function handler(req, res) {
   const keyPreview = (process.env.PANDASCORE_KEY || '').slice(0, 8);
   console.log('[DIAG] PANDASCORE_KEY preview:', keyPreview || 'EMPTY');
   if (req.query.diag === '1') {
-    const testUrl = `https://api.pandascore.co/csgo/players?search%5Bname%5D=donk&per_page=3`;
+    const testUrl = 'https://api.opendota.com/api/search?q=Miracle-';
+    const testRes = await fetch(testUrl, {});
+    const testData = await testRes.json().catch(() => 'parse error');
+    return res.json({ status: testRes.status, count: Array.isArray(testData) ? testData.length : 'not array', first: testData[0] });
+  }
+  if (req.query.diag === '2') {
+    const testUrl2 = 'https://api.pandascore.co/csgo/players?search%5Bname%5D=donk&per_page=3';
     const testRes = await fetch(testUrl, { headers: { Authorization: `Bearer ${process.env.PANDASCORE_KEY}` } });
     const testData = await testRes.json().catch(() => 'parse error');
     return res.json({ keyPreview: keyPreview || 'EMPTY', hasKey: !!process.env.PANDASCORE_KEY, psStatus: testRes.status, psData: testData });
