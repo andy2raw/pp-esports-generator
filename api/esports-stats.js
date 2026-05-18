@@ -406,78 +406,25 @@ const DOTA2_FIELD_MAP = {
 }
 
 async function getDota2Stats(name, statType) {
-  const field = DOTA2_FIELD_MAP[statType]
-  if (!field) return null
-
-  const results = await safeFetch(
-    `https://api.opendota.com/api/search?q=${encodeURIComponent(name)}`,
-  )
-  if (!results?.length) return null
-
-  const nl = name.toLowerCase()
-  const player =
-    results.find(p => p.personaname?.toLowerCase() === nl) ||
-    results.find(p => p.personaname?.toLowerCase().includes(nl)) ||
-    results[0]
-
-  const matches = await safeFetch(
-    `https://api.opendota.com/api/players/${player.account_id}/recentMatches`,
-  )
-  if (!Array.isArray(matches) || !matches.length) return null
-
-  const values = matches.slice(0, 10).map(m => m[field]).filter(v => v != null && v >= 0)
-  if (!values.length) return null
-
-  return { last5Avg: avg(values.slice(0, 5)), seasonAvg: avg(values), source: 'opendota' }
+  try {
+    const st = (statType || '').toLowerCase()
+    const field = st.includes('kill') ? 'kills' : st.includes('death') ? 'deaths' : st.includes('assist') ? 'assists' : 'kills'
+    const searchRes = await safeFetch('https://api.opendota.com/api/search?q=' + encodeURIComponent(name), { timeoutMs: 6000, headers: {} })
+    const players = searchRes?.ok ? await searchRes.json().catch(() => []) : []
+    if (!Array.isArray(players) || !players.length) return null
+    const nl = name.toLowerCase()
+    const player = players.find(p => p.personaname?.toLowerCase() === nl) || players[0]
+    if (!player?.account_id) return null
+    const matchRes = await safeFetch('https://api.opendota.com/api/players/' + player.account_id + '/recentMatches', { timeoutMs: 6000, headers: {} })
+    const matches = matchRes?.ok ? await matchRes.json().catch(() => []) : []
+    if (!Array.isArray(matches) || !matches.length) return null
+    const values = matches.slice(0, 10).map(m => m[field]).filter(v => typeof v === 'number')
+    if (!values.length) return null
+    const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length
+    return { seasonAvg: parseFloat(avg(values).toFixed(2)), lastS5Avg: parseFloat(avg(values.slice(0, 5)).toFixed(2)), source: 'opendota' }
+  } catch(e) { return null }
 }
 
-// ── CSGO/CS2 — PandaScore first, per-map reference table fallback ────────────
-// All values are per-MAP averages (kills, headshots, deaths, assists counts).
-// Previous table used KPR/DPR/HS% from HLTV — those are wrong units for PP lines.
-const CSGO_REF = {
-  // ── Tier 1 — top pro level ───────────────────────────────────────────────
-  jamyoung:  { kills: 18, headshots: 8,  deaths: 14, assists: 3 },
-  matys:     { kills: 17, headshots: 9,  deaths: 14, assists: 3 },
-  nightfall: { kills: 16, headshots: 7,  deaths: 14, assists: 3 },
-  'kair0n-': { kills: 17, headshots: 8,  deaths: 13, assists: 3 },
-  xantares:  { kills: 21, headshots: 13, deaths: 15, assists: 2 },
-  niko:      { kills: 22, headshots: 14, deaths: 13, assists: 3 },
-  electronic:{ kills: 18, headshots: 9,  deaths: 14, assists: 4 },
-  b1t:       { kills: 18, headshots: 8,  deaths: 13, assists: 4 },
-  jl:        { kills: 17, headshots: 9,  deaths: 14, assists: 3 },
-  sh1ro:     { kills: 20, headshots: 10, deaths: 13, assists: 3 },
-  zywoo:     { kills: 22, headshots: 11, deaths: 12, assists: 3 },
-  s1mple:    { kills: 22, headshots: 12, deaths: 12, assists: 3 },
-  device:    { kills: 19, headshots: 10, deaths: 13, assists: 3 },
-  ropz:      { kills: 19, headshots: 9,  deaths: 13, assists: 3 },
-  hunter:    { kills: 18, headshots: 9,  deaths: 14, assists: 4 },
-  // ── Tier 2/3 — PrizePicks regulars (profilerr/rdy.gg/HLTV, 2024-25) ─────
-  // All values: per-MAP counts derived from KPR×25, DPR×25, APR×25, HS%×kills
-  jackasmo:  { kills: 18, headshots: 8,  deaths: 17, assists: 6 }, // profilerr: KPR 0.71, 43% HS, fnatic
-  suki:      { kills: 17, headshots: 6,  deaths: 15, assists: 5 }, // profilerr: KPR 0.66, 38% HS, Kaleido
-  zede:      { kills: 17, headshots: 7,  deaths: 17, assists: 5 }, // profilerr: KPR 0.66, 42% HS, Keyd
-  tuurtle:   { kills: 17, headshots: 7,  deaths: 17, assists: 4 }, // profilerr: KPR 0.68, 40% HS, MIBR
-  ckzao:     { kills: 17, headshots: 6,  deaths: 17, assists: 5 }, // profilerr: KPR 0.67, 34% HS (AWP/support)
-  cjoffo:    { kills: 16, headshots: 9,  deaths: 16, assists: 5 }, // profilerr: KPR 0.65, 56% HS, rifler
-  sstinix:   { kills: 17, headshots: 7,  deaths: 17, assists: 5 }, // profilerr: KPR 0.67, 39% HS, ex-Betera
-  br4tko:    { kills: 17, headshots: 8,  deaths: 18, assists: 5 }, // HLTV KPR 0.69, entry rifler, fnatic
-  something: { kills: 16, headshots: 10, deaths: 16, assists: 5 }, // rdy.gg: 60% HS, rifler, FORZE Reload
-  rzk:       { kills: 17, headshots: 7,  deaths: 18, assists: 5 }, // profilerr: KPR 0.66, 41% HS, Dusty Roots
-  perez:     { kills: 16, headshots: 6,  deaths: 17, assists: 5 }, // profilerr: KPR 0.64, 36% HS, MIBR Acad
-  nucleonz:  { kills: 15, headshots: 9,  deaths: 20, assists: 5 }, // rdy.gg: KPR 0.60, 55% HS, Falcons Force
-  veno:      { kills: 16, headshots: 8,  deaths: 17, assists: 5 }, // HLTV attrs (rifler, Sniping=0), Falcons Force
-  n0te:      { kills: 17, headshots: 5,  deaths: 18, assists: 5 }, // profilerr: KPR 0.66, 32% HS (AWP/lurk)
-  moonwalk:  { kills: 14, headshots: 5,  deaths: 19, assists: 5 }, // profilerr: KPR 0.57, 33% HS, support
-  clockzi:   { kills: 14, headshots: 6,  deaths: 17, assists: 4 }, // HLTV rating 0.88, passive rifler, age 15
-  // Legacy names corrected to per-map
-  curse:     { kills: 16, headshots: 7,  deaths: 15, assists: 3 },
-  nafany:    { kills: 15, headshots: 6,  deaths: 15, assists: 4 },
-}
-
-// ±5% deterministic jitter on last5Avg to simulate recent-form variance.
-function jitter(base) {
-  return +(base * (0.93 + ((base * 17) % 1) * 0.14)).toFixed(2)
-}
 
 async function getCsgoStats(name, statType) {
   // Normalize before PandaScore lookup — raw statType like "MAPS 1-2 Kills"
