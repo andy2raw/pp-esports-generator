@@ -443,419 +443,267 @@ export default function App() {
   const hasSlips = combos2.length > 0 || combos3.length > 0 || combos4.length > 0 || lotterySlip || hasUnderSlips || underCombos6.length > 0
 
 
+
+  const LEAGUE_COLORS = {
+    LOL: '#c89b3c', CS2: '#4ade80', CSGO: '#4ade80',
+    VAL: '#f472b6', DOTA2: '#f97316', MLB: '#60a5fa',
+  }
+
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--cream)', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--cream)' }}>
       <ErrorBoundary label="Quote failed">
         <DailyQuote />
       </ErrorBoundary>
 
       <header style={{
-        background: '#181818', borderBottom: '1px solid #2a2a2a',
-        padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        background: 'var(--surface)', borderBottom: '1px solid var(--border)',
+        padding: '0 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        height: 52, position: 'sticky', top: 0, zIndex: 50,
       }}>
-        <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: -0.5 }}>
-          PP <span style={{ color: 'var(--green)' }}>Esports</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: -0.5, lineHeight: 1 }}>
+            <span style={{ color: 'var(--green)' }}>PP</span>
+            <span style={{ color: '#3a3a3a', margin: '0 4px' }}>·</span>
+            <span style={{ color: 'var(--cream)', fontSize: 14, fontWeight: 600, letterSpacing: 0 }}>Esports</span>
+          </div>
+          {psLoading && (
+            <span style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+              background: '#22c55e14', color: '#22c55e88', border: '1px solid #22c55e30',
+              borderRadius: 4, padding: '2px 7px', animation: 'pulse-glow 1.5s ease-in-out infinite',
+            }}>LOADING STATS</span>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {lastRefresh && (
-            <span style={{ fontSize: 10, color: '#666' }}>
+            <div style={{ fontSize: 11, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
               {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, '0')}
-            </span>
+            </div>
           )}
-          <button
-            onClick={refresh}
-            disabled={loading}
-            style={{
-              background: loading ? '#333' : '#2a2a2a', border: '1px solid #3a3a3a',
-              color: 'var(--cream)', borderRadius: 6, padding: '6px 12px',
-              fontSize: 12, cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {loading ? '...' : '↺'}
+          <button onClick={refresh} disabled={loading} style={{
+            background: loading ? '#1a1a1a' : 'var(--surface2)',
+            border: '1px solid var(--border2)', color: loading ? '#444' : 'var(--cream)',
+            borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600,
+            cursor: loading ? 'not-allowed' : 'pointer',
+          }}>
+            {loading ? '···' : '↺ Refresh'}
           </button>
         </div>
       </header>
 
-      {/* ── Top-level tab bar ── */}
-      <div style={{
-        background: '#181818', borderBottom: '1px solid #2a2a2a',
-        display: 'flex', gap: 0,
+      <nav style={{
+        background: 'var(--surface)', borderBottom: '1px solid var(--border)',
+        display: 'flex', gap: 0, paddingLeft: 20,
       }}>
         {[{ id: 'slips', label: 'Slips' }, { id: 'results', label: 'Results' }, { id: 'ladder', label: '★ Ladder' }].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            style={{
-              padding: '10px 20px', background: 'transparent', border: 'none',
-              borderBottom: activeTab === tab.id ? '2px solid var(--green)' : '2px solid transparent',
-              color: activeTab === tab.id ? 'var(--green)' : '#666',
-              fontSize: 13, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.3,
-            }}
-          >
-            {tab.label}
-          </button>
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+            padding: '12px 20px', background: 'transparent', border: 'none',
+            borderBottom: activeTab === tab.id ? '2px solid var(--green)' : '2px solid transparent',
+            color: activeTab === tab.id ? 'var(--green)' : 'var(--muted)',
+            fontSize: 12, fontWeight: 700, cursor: 'pointer', letterSpacing: 0.5,
+          }}>{tab.label}</button>
         ))}
-      </div>
+      </nav>
 
-      {/* ── Ladder tab ── */}
-      {activeTab === 'ladder' && (
-        <LadderChallenge todaySlip={ladderSlip} />
-      )}
+      {activeTab === 'ladder' && <LadderChallenge todaySlip={ladderSlip} />}
+      {activeTab === 'results' && <ResultsPage trackedSlips={trackedSlips} setResult={setResult} />}
 
-      {/* ── Results tab ── */}
-      {activeTab === 'results' && (
-        <ResultsPage
-          trackedSlips={trackedSlips}
-          setResult={setResult}
-        />
-      )}
-
-      {/* ── Slips tab ── */}
       {activeTab === 'slips' && (
-        <>
-          {/* League filter */}
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid #2a2a2a', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            {LEAGUES.map(l => (
-              <button
-                key={l}
-                onClick={() => setLeague(l)}
-                style={{
-                  padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  border: '1px solid',
-                  borderColor: league === l ? 'var(--green)' : '#333',
-                  background: league === l ? '#22c55e22' : '#1e1e1e',
-                  color: league === l ? 'var(--green)' : '#aaa',
-                }}
-              >
-                {l}
-              </button>
-            ))}
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: '#555' }}>
-              {filtered.length} props
-            </span>
+        <div style={{ padding: '16px 20px 40px' }}>
+
+          <div style={{
+            display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center',
+            marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--border)',
+          }}>
+            {LEAGUES.map(l => {
+              const lc = LEAGUE_COLORS[l]
+              const active = league === l
+              return (
+                <button key={l} onClick={() => setLeague(l)} style={{
+                  padding: '5px 14px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+                  cursor: 'pointer', border: '1px solid', letterSpacing: 0.4,
+                  borderColor: active ? (lc || 'var(--green)') : 'var(--border2)',
+                  background: active ? `${lc || '#22c55e'}18` : 'var(--surface)',
+                  color: active ? (lc || 'var(--green)') : 'var(--muted)',
+                }}>{l}</button>
+              )
+            })}
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--muted)' }}>{filtered.length} props</span>
           </div>
 
           {error && (
-            <div style={{ margin: 16, padding: 12, background: '#2a1111', border: '1px solid #7f1d1d', borderRadius: 8, fontSize: 12, color: '#fca5a5' }}>
-              {error}
-            </div>
+            <div style={{ marginBottom: 16, padding: '10px 14px', background: '#1f0a0a', border: '1px solid #7f1d1d', borderRadius: 8, fontSize: 12, color: '#fca5a5' }}>{error}</div>
           )}
 
-          <div style={{ padding: '16px' }}>
-            <p style={{ margin: '0 0 14px', fontSize: 11, color: '#555', lineHeight: 1.5 }}>
-              Standard props form the foundation of every slip. Goblins are bonus picks — max 1 per 2/3-leg, max 2 per 4/6-leg. No player appears more than twice across all slips.
-            </p>
-
-            {/* ── Top Picks Today ── */}
-            {topPicks.length > 0 && (
-              <ErrorBoundary label="Top picks error">
-                <div style={{ marginBottom: 28 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 10 }}>
-                    TOP PICKS TODAY
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-                    {topPicks.map(p => {
-                      const lock   = isLock(p.line, p.statType)
-                      const goblin = !lock && isGoblin(p)
-                      const demon  = p.oddsType === 'demon'
-                      const badge  = lock   ? { label: 'LOCK',   bg: '#1d4ed822', color: '#60a5fa', border: '#1d4ed855' }
-                                   : goblin ? { label: 'GOBLIN', bg: '#16a34a22', color: '#16a34a', border: '#16a34a55' }
-                                   : demon  ? { label: 'DEMON',  bg: '#6b21a822', color: '#a78bfa', border: '#6b21a855' }
-                                   : null
-                      const sl = getStatLine(p.playerName, p.league, p.statType)
-                      const l5 = sl?.last5Avg ?? sl?.seasonAvg
-                      const { overUnder, probability: displayProb, sharp: isSharp } =
-                        resolveOverUnder(sl, p.league, p.statType, p.line, p.probability)
-                      // Format avg display: abbreviate stat unit (K=Kills, D=Deaths, A=Assists, H=Hits)
-                      const STAT_ABBR = { Kills: 'K', Deaths: 'D', Assists: 'A', Hits: 'H' }
-                      const unit = STAT_ABBR[p.statType] || ''
-                      const avgLabel = l5 != null ? `Avg: ${l5.toFixed(1)}${unit}` : null
-                      return (
-                        <div key={p.id} style={{
-                          background: '#1e1e1e', border: `1px solid ${isSharp ? '#eab30840' : '#2a2a2a'}`, borderRadius: 8,
-                          padding: '10px 14px', minWidth: 130, flexShrink: 0,
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-                            {badge && (
-                              <span style={{
-                                fontSize: 8, background: badge.bg, color: badge.color,
-                                border: `1px solid ${badge.border}`, borderRadius: 3,
-                                padding: '1px 4px', fontWeight: 700, letterSpacing: 0.3,
-                              }}>{badge.label}</span>
-                            )}
-                            {p.sharpValue && (
-                              <span style={{
-                                fontSize: 8, fontWeight: 700,
-                                background: '#22c55e14', color: '#22c55e',
-                                border: '1px solid #22c55e40', borderRadius: 3, padding: '1px 4px',
-                              }}>SHARP VALUE</span>
-                            )}
-                            {!p.sharpValue && isSharp && (
-                              <span style={{
-                                fontSize: 8, fontWeight: 700,
-                                background: '#eab30814', color: '#eab308',
-                                border: '1px solid #eab30840', borderRadius: 3, padding: '1px 4px',
-                              }}>SHARP</span>
-                            )}
-                            <span style={{ fontSize: 9, color: '#555' }}>{p.league}</span>
-                            <span style={{
-                              fontSize: 8, fontWeight: 700,
-                              background: overUnder === 'OVER' ? '#22c55e14' : '#ef444414',
-                              color: overUnder === 'OVER' ? '#22c55e' : '#ef4444',
-                              border: `1px solid ${overUnder === 'OVER' ? '#22c55e40' : '#ef444440'}`,
-                              borderRadius: 3, padding: '1px 4px',
-                            }}>{overUnder}</span>
-                          </div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--cream)', marginBottom: 2 }}>
-                            {p.playerName}
-                          </div>
-                          <div style={{ fontSize: 10, color: '#666', marginBottom: avgLabel ? 2 : 6 }}>
-                            {p.statType} O{p.line}
-                          </div>
-                          {avgLabel && (
-                            <div style={{ fontSize: 9, color: '#888', marginBottom: 2 }}>
-                              {avgLabel} · Line: O{p.line}
-                            </div>
-                          )}
-                          {p.marketLines && (
-                            <div style={{ fontSize: 9, color: p.sharpValue ? '#22c55e' : '#666', marginBottom: 6, fontWeight: p.sharpValue ? 700 : 400 }}>
-                              PP: O{p.line}
-                              {p.marketLines.dk != null && ` · DK: O${p.marketLines.dk}`}
-                              {p.marketLines.fd != null && ` · FD: O${p.marketLines.fd}`}
-                            </div>
-                          )}
-                          <div style={{ fontSize: 20, fontWeight: 800, color: probColor(displayProb) }}>
-                            {fmtPct(displayProb)}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+          {topPicks.length > 0 && (
+            <ErrorBoundary label="Top picks error">
+              <section style={{ marginBottom: 28 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: 'var(--muted)' }}>TOP PICKS TODAY</span>
+                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                 </div>
-              </ErrorBoundary>
-            )}
+                <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6 }}>
+                  {topPicks.map(p => {
+                    const sl = getStatLine(p.playerName, p.league, p.statType)
+                    const l5 = sl?.last5Avg ?? sl?.seasonAvg
+                    const { overUnder, probability: displayProb, sharp: isSharp } =
+                      resolveOverUnder(sl, p.league, p.statType, p.line, p.probability)
+                    const isOver = overUnder === 'OVER'
+                    const lc = LEAGUE_COLORS[p.league] || '#888'
+                    return (
+                      <div key={p.id} style={{
+                        background: 'var(--surface)',
+                        border: `1px solid ${p.sharpValue ? '#22c55e40' : isSharp ? '#eab30840' : 'var(--border)'}`,
+                        borderRadius: 10, padding: '12px 14px', minWidth: 140, flexShrink: 0,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 7 }}>
+                          <span style={{ fontSize: 8, fontWeight: 800, color: lc, background: `${lc}18`, border: `1px solid ${lc}50`, borderRadius: 3, padding: '1px 5px' }}>{p.league}</span>
+                          {p.sharpValue && <span style={{ fontSize: 8, fontWeight: 700, color: '#22c55e', background: '#22c55e14', border: '1px solid #22c55e40', borderRadius: 3, padding: '1px 4px' }}>SHARP VALUE</span>}
+                          {!p.sharpValue && isSharp && <span style={{ fontSize: 8, fontWeight: 700, color: '#eab308', background: '#eab30814', border: '1px solid #eab30840', borderRadius: 3, padding: '1px 4px' }}>SHARP</span>}
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--cream)', marginBottom: 2 }}>{p.playerName}</div>
+                        <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 6 }}>{p.statType} · O{p.line}</div>
+                        {l5 != null && <div style={{ fontSize: 9, color: '#555', marginBottom: 6 }}>Avg {l5.toFixed(1)}</div>}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, borderRadius: 3, padding: '2px 5px', background: isOver ? '#22c55e18' : '#ef444418', color: isOver ? 'var(--green)' : 'var(--red)', border: `1px solid ${isOver ? '#22c55e40' : '#ef444440'}` }}>{overUnder}</span>
+                          <span style={{ fontSize: 16, fontWeight: 800, color: probColor(displayProb) }}>{fmtPct(displayProb)}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            </ErrorBoundary>
+          )}
 
-            {/* ── Slip sections ── */}
-            {hasSlips && (
-              <ErrorBoundary label="Slip cards error">
-                {/* Hero: Core 4-Leg */}
-                {combos4.length > 0 && (
-                  <div style={{ marginBottom: 32 }}>
-                    <div style={{
-                      fontSize: 13, fontWeight: 800, color: '#c9a84c', letterSpacing: 1, marginBottom: 12,
-                      display: 'flex', alignItems: 'center', gap: 8,
-                    }}>
-                      ★ CORE 4-LEG
-                      <span style={{
-                        fontSize: 9, fontWeight: 700, color: '#888', background: '#2a2a1a',
-                        border: '1px solid #444', borderRadius: 4, padding: '2px 6px', letterSpacing: 0.5,
-                      }}>FLAGSHIP</span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
-                      {combos4.map((c, i) => (
-                        <SlipCard key={i} combo={c} rank={i + 1} variant="core4" confidence={c.confidence}
-                          onTrack={() => addSlip(c, 'Core 4-Leg', league)} />
-                      ))}
-                    </div>
+          {hasSlips && (
+            <ErrorBoundary label="Slip cards error">
+              {combos4.length > 0 && (
+                <section style={{ marginBottom: 28 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: 'var(--gold)' }}>★ CORE 4-LEG</span>
+                    <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', background: 'var(--surface2)', border: '1px solid var(--border2)', borderRadius: 4, padding: '2px 6px' }}>FLAGSHIP</span>
+                    <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                   </div>
-                )}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
+                    {combos4.map((c, i) => <SlipCard key={i} combo={c} rank={i + 1} variant="core4" confidence={c.confidence} onTrack={() => addSlip(c, 'Core 4-Leg', league)} />)}
+                  </div>
+                </section>
+              )}
 
-                {/* Two-column: Precision 2-Leg | Edge 3-Leg */}
-                {(combos2.length > 0 || combos3.length > 0) && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start', marginBottom: 32 }}>
+              {(combos2.length > 0 || combos3.length > 0) && (
+                <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28, alignItems: 'start' }}>
+                  <div>
+                    {combos2.length > 0 && (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: 'var(--muted)' }}>PRECISION 2-LEG</span>
+                          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                        </div>
+                        {combos2.map((c, i) => <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence} onTrack={() => addSlip(c, 'Precision 2-Leg', league)} />)}
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    {combos3.length > 0 && (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: 'var(--muted)' }}>EDGE 3-LEG</span>
+                          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                        </div>
+                        {combos3.map((c, i) => <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence} onTrack={() => addSlip(c, 'Edge 3-Leg', league)} />)}
+                      </>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {hasUnderSlips && (
+                <section style={{ marginBottom: 28 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: '#ef4444' }}>↓ UNDER PARLAY</span>
+                    <span style={{ fontSize: 8, fontWeight: 700, color: '#ef444488', background: '#ef444410', border: '1px solid #ef444430', borderRadius: 4, padding: '2px 6px' }}>FADE THE LINE</span>
+                    <div style={{ flex: 1, height: 1, background: '#ef444420' }} />
+                  </div>
+                  <p style={{ margin: '0 0 14px', fontSize: 10, color: 'var(--muted)', fontStyle: 'italic' }}>Lines set ≥20% above typical average. Two 65%+ fades = 42%+ joint at 3× payout — positive EV.</p>
+                  {underCombos2.length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: '#ef444488', letterSpacing: 1, marginBottom: 8 }}>2-LEG · BEST EV</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10 }}>
+                        {underCombos2.map((c, i) => <SlipCard key={`u2-${i}`} combo={c} rank={i + 1} confidence={c.confidence} label="UNDERS 2-LEG" onTrack={() => addSlip(c, 'Under Parlay 2-Leg', league)} />)}
+                      </div>
+                    </div>
+                  )}
+                  {underCombos3.length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: '#ef444455', letterSpacing: 1, marginBottom: 8 }}>3-LEG</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10 }}>
+                        {underCombos3.map((c, i) => <SlipCard key={`u3-${i}`} combo={c} rank={i + 1} confidence={c.confidence} label="UNDERS 3-LEG" onTrack={() => addSlip(c, 'Under Parlay 3-Leg', league)} />)}
+                      </div>
+                    </div>
+                  )}
+                  {underCombos4.length > 0 && (
                     <div>
-                      {combos2.length > 0 && (
-                        <>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>
-                            PRECISION 2-LEG
-                          </div>
-                          {combos2.map((c, i) => (
-                            <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
-                              onTrack={() => addSlip(c, 'Precision 2-Leg', league)} />
-                          ))}
-                        </>
-                      )}
-                    </div>
-                    <div>
-                      {combos3.length > 0 && (
-                        <>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 8 }}>
-                            EDGE 3-LEG
-                          </div>
-                          {combos3.map((c, i) => (
-                            <SlipCard key={i} combo={c} rank={i + 1} confidence={c.confidence}
-                              onTrack={() => addSlip(c, 'Edge 3-Leg', league)} />
-                          ))}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Under Parlay — lines ≥20% above typical, formula-based underProb */}
-                {hasUnderSlips && (
-                  <div style={{
-                    marginBottom: 32,
-                    background: '#1a0a0a', border: '1px solid #ef444440',
-                    borderRadius: 10, padding: '16px 16px 12px',
-                  }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      fontSize: 13, fontWeight: 800, color: '#ef4444',
-                      letterSpacing: 1, marginBottom: 4,
-                    }}>
-                      ↓ UNDER PARLAY
-                      <span style={{
-                        fontSize: 9, fontWeight: 700, color: '#888', background: '#2a1010',
-                        border: '1px solid #ef444433', borderRadius: 4, padding: '2px 6px', letterSpacing: 0.5,
-                      }}>FADE THE LINE</span>
-                    </div>
-                    <p style={{ margin: '0 0 16px', fontSize: 10, color: '#555', fontStyle: 'italic' }}>
-                      Lines set ≥20% above typical average. Two 65%+ fades = 42%+ joint at 3× payout — positive EV.
-                    </p>
-
-                    {/* Primary: 2-leg under — best risk/reward */}
-                    {underCombos2.length > 0 && (
-                      <div style={{ marginBottom: 20 }}>
-                        <div style={{
-                          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
-                          fontSize: 10, fontWeight: 800, color: '#ef4444', letterSpacing: 1,
-                        }}>
-                          PRIMARY FADE
-                          <span style={{
-                            fontSize: 9, color: '#888', background: '#2a1010',
-                            border: '1px solid #ef444433', borderRadius: 4, padding: '1px 6px',
-                          }}>2-LEG · BEST EV</span>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-                          {underCombos2.map((c, i) => (
-                            <SlipCard key={`u2-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
-                              label="UNDERS 2-LEG" onTrack={() => addSlip(c, 'Under Parlay 2-Leg', league)} />
-                          ))}
-                        </div>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: '#ef444433', letterSpacing: 1, marginBottom: 8 }}>4-LEG</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10 }}>
+                        {underCombos4.map((c, i) => <SlipCard key={`u4-${i}`} combo={c} rank={i + 1} confidence={c.confidence} label="UNDERS 4-LEG" onTrack={() => addSlip(c, 'Under Parlay 4-Leg', league)} />)}
                       </div>
-                    )}
-
-                    {/* Higher risk: 3-leg */}
-                    {underCombos3.length > 0 && (
-                      <div style={{ marginBottom: 20 }}>
-                        <div style={{
-                          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
-                          fontSize: 10, fontWeight: 700, color: '#ef444488', letterSpacing: 1,
-                        }}>
-                          HIGHER RISK
-                          <span style={{
-                            fontSize: 9, color: '#666', background: '#1f1010',
-                            border: '1px solid #ef444422', borderRadius: 4, padding: '1px 6px',
-                          }}>3-LEG</span>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-                          {underCombos3.map((c, i) => (
-                            <SlipCard key={`u3-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
-                              label="UNDERS 3-LEG" onTrack={() => addSlip(c, 'Under Parlay 3-Leg', league)} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Higher risk: 4-leg */}
-                    {underCombos4.length > 0 && (
-                      <div>
-                        <div style={{
-                          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
-                          fontSize: 10, fontWeight: 700, color: '#ef444466', letterSpacing: 1,
-                        }}>
-                          HIGHER RISK
-                          <span style={{
-                            fontSize: 9, color: '#555', background: '#1a0f0f',
-                            border: '1px solid #ef444418', borderRadius: 4, padding: '1px 6px',
-                          }}>4-LEG</span>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-                          {underCombos4.map((c, i) => (
-                            <SlipCard key={`u4-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
-                              label="UNDERS 4-LEG" onTrack={() => addSlip(c, 'Under Parlay 4-Leg', league)} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Unders 6-Leg — esports only, sorted by fade strength */}
-                {underCombos6.length > 0 && (
-                  <div style={{
-                    marginBottom: 32,
-                    background: '#100a1a', border: '1px solid #7c3aed40',
-                    borderRadius: 10, padding: '16px 16px 12px',
-                  }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      fontSize: 13, fontWeight: 800, color: '#a78bfa',
-                      letterSpacing: 1, marginBottom: 4,
-                    }}>
-                      ↓ UNDERS 6-LEG
-                      <span style={{
-                        fontSize: 9, fontWeight: 700, color: '#888', background: '#1a1025',
-                        border: '1px solid #7c3aed33', borderRadius: 4, padding: '2px 6px', letterSpacing: 0.5,
-                      }}>FADE</span>
                     </div>
-                    <p style={{ margin: '0 0 16px', fontSize: 10, color: '#555', fontStyle: 'italic' }}>
-                      Esports props with highest fade strength — lines furthest above typical avg, sorted by fade %.
-                    </p>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
-                      {underCombos6.map((c, i) => (
-                        <SlipCard key={`u6-${i}`} combo={c} rank={i + 1} confidence={c.confidence}
-                          label="UNDERS 6-LEG"
-                          onTrack={() => addSlip(c, 'Unders 6-Leg', league)} />
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </section>
+              )}
 
-                {/* Lottery 6-Leg */}
-                {lotterySlip && (
-                  <div style={{ marginBottom: 32 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a84c', letterSpacing: 1, marginBottom: 8 }}>
-                      LOTTERY 6-LEG
-                    </div>
-                    <SlipCard combo={lotterySlip} rank={1} variant="lottery" confidence={lotterySlip.confidence}
-                      onTrack={() => addSlip(lotterySlip, 'Lottery 6-Leg', 'ALL')} />
+              {underCombos6.length > 0 && (
+                <section style={{ marginBottom: 28 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: '#a78bfa' }}>↓ UNDERS 6-LEG</span>
+                    <span style={{ fontSize: 8, fontWeight: 700, color: '#a78bfa88', background: '#a78bfa10', border: '1px solid #a78bfa30', borderRadius: 4, padding: '2px 6px' }}>FADE</span>
+                    <div style={{ flex: 1, height: 1, background: '#a78bfa20' }} />
                   </div>
-                )}
-              </ErrorBoundary>
-            )}
+                  <p style={{ margin: '0 0 14px', fontSize: 10, color: 'var(--muted)', fontStyle: 'italic' }}>Highest fade strength props — lines furthest above typical avg, sorted by fade %.</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
+                    {underCombos6.map((c, i) => <SlipCard key={`u6-${i}`} combo={c} rank={i + 1} confidence={c.confidence} label="UNDERS 6-LEG" onTrack={() => addSlip(c, 'Unders 6-Leg', league)} />)}
+                  </div>
+                </section>
+              )}
 
-            {/* ── All Projections table ── */}
-            <ErrorBoundary label="Projections table error">
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#666', letterSpacing: 1, marginBottom: 4, marginTop: 32 }}>
-                ALL PROJECTIONS
-              </div>
-              <div style={{ fontSize: 10, color: '#444', marginBottom: 10 }}>
-                Showing top {Math.min(50, sorted.length)} of {sorted.length} props
+              {lotterySlip && (
+                <section style={{ marginBottom: 28 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: 'var(--gold)' }}>LOTTERY 6-LEG</span>
+                    <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                  </div>
+                  <SlipCard combo={lotterySlip} rank={1} variant="lottery" confidence={lotterySlip.confidence} onTrack={() => addSlip(lotterySlip, 'Lottery 6-Leg', 'ALL')} />
+                </section>
+              )}
+            </ErrorBoundary>
+          )}
+
+          <ErrorBoundary label="Projections table error">
+            <div style={{ marginTop: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.2, color: 'var(--muted)' }}>ALL PROJECTIONS</span>
+                <span style={{ fontSize: 10, color: '#444' }}>top {Math.min(50, sorted.length)} of {sorted.length}</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
               </div>
               {loading && !projections.length ? (
-                <div style={{ color: '#555', fontSize: 13, padding: '40px 0', textAlign: 'center' }}>Loading...</div>
+                <div style={{ color: 'var(--muted)', fontSize: 13, padding: '48px 0', textAlign: 'center' }}>Loading props…</div>
               ) : sorted.length === 0 ? (
-                <div style={{ color: '#555', fontSize: 13, padding: '40px 0', textAlign: 'center' }}>
-                  {league === 'MLB'
-                    ? 'No MLB props available right now. PrizePicks typically posts MLB props 2–3 hours before first pitch.'
-                    : 'No props available right now.'}
+                <div style={{ color: 'var(--muted)', fontSize: 13, padding: '48px 0', textAlign: 'center' }}>
+                  {league === 'MLB' ? 'No MLB props right now. PrizePicks typically posts 2–3h before first pitch.' : 'No props available right now.'}
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
+                <div style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid var(--border)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
-                      <tr style={{ borderBottom: '1px solid #2a2a2a' }}>
-                        {['Player', 'Team', 'Opponent', 'League', 'Stat', 'Line', 'Rec', 'Stats', 'Hit Prob', '2-Leg EV', '4-Leg EV'].map(h => (
-                          <th key={h} style={{ padding: '8px 10px', textAlign: 'left', color: '#555', fontWeight: 600, fontSize: 10, letterSpacing: 0.5, whiteSpace: 'nowrap' }}>
-                            {h}
-                          </th>
+                      <tr style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border2)' }}>
+                        {['Player', 'Team', 'Opp', 'League', 'Stat', 'Line', 'Rec', 'Stats', 'Prob', '2-Leg EV', '4-Leg EV'].map(h => (
+                          <th key={h} style={{ padding: '9px 12px', textAlign: 'left', color: 'var(--muted)', fontWeight: 700, fontSize: 9, letterSpacing: 0.8, whiteSpace: 'nowrap' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {sorted.slice(0, 50).map(p => {
+                      {sorted.slice(0, 50).map((p, idx) => {
                         const ppGoblin = p.oddsType === 'goblin'
                         const goblinDisplay = isGoblin(p)
                         const sl = getStatLine(p.playerName, p.league, p.statType)
@@ -864,96 +712,49 @@ export default function App() {
                         const ev2 = calcEV(displayProb, 2, ppGoblin ? 1 : 0)
                         const ev4 = calcEV(displayProb, 4, ppGoblin ? 1 : 0)
                         const hasHistory = playerHistory[p.playerName]
+                        const lc = LEAGUE_COLORS[p.league] || '#888'
                         return (
-                          <tr key={p.id} style={{ borderBottom: '1px solid #1f1f1f' }}>
-                            <td style={{ padding: '9px 10px', color: 'var(--cream)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          <tr key={p.id} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : '#ffffff04' }}>
+                            <td style={{ padding: '8px 12px', color: 'var(--cream)', fontWeight: 600, whiteSpace: 'nowrap' }}>
                               {p.playerName}
-                              {ppGoblin && (
-                                <span style={{ marginLeft: 5, fontSize: 9, background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b55', borderRadius: 3, padding: '1px 4px' }}>GOB</span>
-                              )}
-                              {hasHistory && (
-                                <span style={{ marginLeft: 5, fontSize: 9, color: hasHistory.hits >= hasHistory.misses ? 'var(--green)' : 'var(--red)' }}>
-                                  {hasHistory.hits}W {hasHistory.misses}L
-                                </span>
-                              )}
+                              {ppGoblin && <span style={{ marginLeft: 5, fontSize: 8, background: '#f59e0b18', color: '#f59e0b', border: '1px solid #f59e0b44', borderRadius: 3, padding: '1px 4px' }}>GOB</span>}
+                              {hasHistory && <span style={{ marginLeft: 5, fontSize: 9, color: hasHistory.hits >= hasHistory.misses ? 'var(--green)' : 'var(--red)' }}>{hasHistory.hits}W {hasHistory.misses}L</span>}
                             </td>
-                            <td style={{ padding: '9px 10px', color: '#888', whiteSpace: 'nowrap' }}>{p.team || '—'}</td>
-                            <td style={{ padding: '9px 10px', color: '#666', fontSize: 10, fontStyle: 'italic', whiteSpace: 'nowrap' }}>
-                              {p.opponent ? `vs ${p.opponent}` : '—'}
+                            <td style={{ padding: '8px 12px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{p.team || '—'}</td>
+                            <td style={{ padding: '8px 12px', color: '#555', fontSize: 10, fontStyle: 'italic', whiteSpace: 'nowrap' }}>{p.opponent ? `vs ${p.opponent}` : '—'}</td>
+                            <td style={{ padding: '8px 12px' }}>
+                              <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: 0.5, color: lc, background: `${lc}18`, border: `1px solid ${lc}44`, borderRadius: 3, padding: '1px 5px' }}>{p.league}</span>
                             </td>
-                            <td style={{ padding: '9px 10px', color: '#666', fontSize: 10 }}>{p.league}</td>
-                            <td style={{ padding: '9px 10px', color: '#aaa', whiteSpace: 'nowrap' }}>{p.statType}</td>
-                            <td style={{ padding: '9px 10px', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                            <td style={{ padding: '8px 12px', color: '#aaa', whiteSpace: 'nowrap' }}>{p.statType}</td>
+                            <td style={{ padding: '8px 12px', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                               {p.line}
-                              {isLock(p.line, p.statType) ? (
-                                <span style={{ marginLeft: 5, fontSize: 9, background: '#1d4ed822', color: '#60a5fa', border: '1px solid #1d4ed855', borderRadius: 3, padding: '1px 4px', fontWeight: 700 }}>LOCK</span>
-                              ) : goblinDisplay ? (
-                                <span style={{ marginLeft: 5, fontSize: 9, background: '#16a34a22', color: '#16a34a', border: '1px solid #16a34a55', borderRadius: 3, padding: '1px 4px', fontWeight: 700 }}>GOBLIN</span>
-                              ) : null}
+                              {isLock(p.line, p.statType) ? <span style={{ marginLeft: 4, fontSize: 8, background: '#1d4ed818', color: '#60a5fa', border: '1px solid #1d4ed844', borderRadius: 3, padding: '1px 4px', fontWeight: 700 }}>LOCK</span>
+                              : goblinDisplay ? <span style={{ marginLeft: 4, fontSize: 8, background: '#16a34a18', color: '#16a34a', border: '1px solid #16a34a44', borderRadius: 3, padding: '1px 4px', fontWeight: 700 }}>GOBLIN</span>
+                              : null}
                             </td>
-                            <td style={{ padding: '9px 10px' }}>
-                              <span style={{
-                                fontSize: 9, fontWeight: 700,
-                                background: overUnder === 'OVER' ? '#22c55e14' : '#ef444414',
-                                color: overUnder === 'OVER' ? '#22c55e' : '#ef4444',
-                                border: `1px solid ${overUnder === 'OVER' ? '#22c55e40' : '#ef444440'}`,
-                                borderRadius: 3, padding: '2px 5px',
-                              }}>
-                                {overUnder}
-                              </span>
-                              {p.sharpValue && (
-                                <span style={{
-                                  marginLeft: 4, fontSize: 9, fontWeight: 700,
-                                  background: '#22c55e14', color: '#22c55e',
-                                  border: '1px solid #22c55e40', borderRadius: 3, padding: '2px 4px',
-                                }}>SHARP VALUE</span>
-                              )}
-                              {!p.sharpValue && propSharp && (
-                                <span style={{
-                                  marginLeft: 4, fontSize: 9, fontWeight: 700,
-                                  background: '#eab30814', color: '#eab308',
-                                  border: '1px solid #eab30840', borderRadius: 3, padding: '2px 4px',
-                                }}>~</span>
-                              )}
+                            <td style={{ padding: '8px 12px' }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, borderRadius: 3, padding: '2px 5px', background: overUnder === 'OVER' ? '#22c55e18' : '#ef444418', color: overUnder === 'OVER' ? 'var(--green)' : 'var(--red)', border: `1px solid ${overUnder === 'OVER' ? '#22c55e40' : '#ef444440'}` }}>{overUnder}</span>
+                              {p.sharpValue && <span style={{ marginLeft: 3, fontSize: 8, fontWeight: 700, background: '#22c55e14', color: 'var(--green)', border: '1px solid #22c55e40', borderRadius: 3, padding: '1px 4px' }}>SV</span>}
+                              {!p.sharpValue && propSharp && <span style={{ marginLeft: 3, fontSize: 9, color: '#eab30888' }}>~</span>}
                             </td>
-                            <td style={{ padding: '9px 10px', whiteSpace: 'nowrap' }}>
+                            <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
                               {sl ? (
                                 p.league === 'MLB' ? (
                                   <div style={{ fontSize: 10, lineHeight: 1.6 }}>
-                                    {sl.last5Avg != null && (
-                                      <div style={{ color: sl.last5Avg >= p.line ? 'var(--green)' : 'var(--red)', fontWeight: 700 }}>
-                                        L5&nbsp;{sl.last5Avg.toFixed(1)}
-                                      </div>
-                                    )}
-                                    {sl.seasonAvg != null && (
-                                      <div style={{ color: '#888' }}>
-                                        Szn&nbsp;{sl.seasonAvg.toFixed(1)}
-                                      </div>
-                                    )}
+                                    {sl.last5Avg != null && <div style={{ color: sl.last5Avg >= p.line ? 'var(--green)' : 'var(--red)', fontWeight: 700 }}>L5 {sl.last5Avg.toFixed(1)}</div>}
+                                    {sl.seasonAvg != null && <div style={{ color: 'var(--muted)' }}>Szn {sl.seasonAvg.toFixed(1)}</div>}
                                   </div>
-                                ) : (
-                                  <StatsBadge seasonAvg={sl.seasonAvg} last5Avg={sl.last5Avg} line={p.line} />
-                                )
-                              ) : psLoading ? (
-                                <span style={{ color: '#444', fontSize: 10 }}>…</span>
-                              ) : null}
+                                ) : <StatsBadge seasonAvg={sl.seasonAvg} last5Avg={sl.last5Avg} line={p.line} />
+                              ) : psLoading ? <span style={{ color: '#333', fontSize: 10 }}>…</span> : null}
                               {p.marketLines && (
-                                <div style={{ fontSize: 9, color: p.sharpValue ? '#22c55e' : '#666', marginTop: sl ? 4 : 0, fontWeight: p.sharpValue ? 700 : 400 }}>
-                                  PP&nbsp;O{p.line}
-                                  {p.marketLines.dk != null && <> · DK&nbsp;O{p.marketLines.dk}</>}
-                                  {p.marketLines.fd != null && <> · FD&nbsp;O{p.marketLines.fd}</>}
+                                <div style={{ fontSize: 8, color: p.sharpValue ? 'var(--green)' : '#555', marginTop: sl ? 3 : 0, fontWeight: p.sharpValue ? 700 : 400 }}>
+                                  PP O{p.line}{p.marketLines.dk != null && <> · DK O{p.marketLines.dk}</>}{p.marketLines.fd != null && <> · FD O{p.marketLines.fd}</>}
                                 </div>
                               )}
                             </td>
-                            <td style={{ padding: '9px 10px', fontWeight: 700, color: probColor(displayProb) }}>
-                              {fmtPct(displayProb)}
-                            </td>
-                            <td style={{ padding: '9px 10px', color: ev2 >= 0 ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>
-                              {fmtEV(ev2)}
-                            </td>
-                            <td style={{ padding: '9px 10px', color: ev4 >= 0 ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>
-                              {fmtEV(ev4)}
-                            </td>
+                            <td style={{ padding: '8px 12px', fontWeight: 700, color: probColor(displayProb) }}>{fmtPct(displayProb)}</td>
+                            <td style={{ padding: '8px 12px', color: ev2 >= 0 ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>{fmtEV(ev2)}</td>
+                            <td style={{ padding: '8px 12px', color: ev4 >= 0 ? 'var(--green)' : 'var(--red)', fontVariantNumeric: 'tabular-nums' }}>{fmtEV(ev4)}</td>
                           </tr>
                         )
                       })}
@@ -961,28 +762,20 @@ export default function App() {
                   </table>
                 </div>
               )}
-            </ErrorBoundary>
+            </div>
+          </ErrorBoundary>
 
-            <ErrorBoundary label="Slip tracker error">
-              <SlipTracker
-                trackedSlips={trackedSlips}
-                setResult={setResult}
-                setMissedLeg={setMissedLeg}
-                removeSlip={removeSlip}
-                playerHistory={playerHistory}
-                wins={wins}
-                losses={losses}
-                pnl={pnl}
-                winRate={winRate}
-                settled={settled}
-                pending={pending}
-                supabaseLoading={supabaseLoading}
-              />
-            </ErrorBoundary>
-          </div>
-        </>
+          <ErrorBoundary label="Slip tracker error">
+            <SlipTracker
+              trackedSlips={trackedSlips} setResult={setResult} setMissedLeg={setMissedLeg}
+              removeSlip={removeSlip} playerHistory={playerHistory}
+              wins={wins} losses={losses} pnl={pnl} winRate={winRate}
+              settled={settled} pending={pending} supabaseLoading={supabaseLoading}
+            />
+          </ErrorBoundary>
+        </div>
       )}
     </div>
   )
 }
-// force rebuild Sat May 16 03:05:02 EDT 2026
+// force rebuild Wed May 20 2026
