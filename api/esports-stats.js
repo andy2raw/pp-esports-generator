@@ -419,7 +419,7 @@ async function getDota2Stats(name, statType) {
     const values = matches.slice(0, 10).map(m => m[field]).filter(v => typeof v === 'number')
     if (!values.length) return null
     const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length
-    return { seasonAvg: parseFloat(avg(values).toFixed(2)), lastS5Avg: parseFloat(avg(values.slice(0, 5)).toFixed(2)), source: 'opendota' }
+    return { seasonAvg: parseFloat(avg(values).toFixed(2)), last5Avg: parseFloat(avg(values.slice(0, 5)).toFixed(2)), source: 'opendota' }
   } catch(e) { return null }
 }
 
