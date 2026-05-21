@@ -1,81 +1,67 @@
 :root {
-  --bg: #1c1c1c;
-  --cream: #f5f0e8;
+  --bg: #0f0f0f;
+  --surface: #161616;
+  --surface2: #1e1e1e;
+  --border: #242424;
+  --border2: #2e2e2e;
+  --cream: #f0ebe0;
+  --muted: #6b6b6b;
   --green: #22c55e;
   --yellow: #eab308;
   --orange: #f97316;
   --red: #ef4444;
+  --gold: #c9a84c;
+  --blue: #3b82f6;
+  --purple: #a78bfa;
+  --cyan: #06b6d4;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--cream);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  line-height: 1.4;
 }
 
 #root {
   width: 100%;
-  max-width: 1200px;
+  max-width: 1280px;
   margin: 0 auto;
 }
 
-button {
-  font-family: inherit;
-}
+button { font-family: inherit; cursor: pointer; }
+table { min-width: 600px; }
 
-table {
-  min-width: 600px;
-}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
 
 @keyframes flash-win {
-  0%   { background-color: #202020; }
-  25%  { background-color: #22c55e30; }
-  100% { background-color: #202020; }
+  0%   { background-color: #161616; }
+  25%  { background-color: #22c55e20; }
+  100% { background-color: #161616; }
 }
-
 @keyframes flash-loss {
-  0%   { background-color: #202020; }
-  25%  { background-color: #ef444430; }
-  100% { background-color: #202020; }
+  0%   { background-color: #161616; }
+  25%  { background-color: #ef444420; }
+  100% { background-color: #161616; }
 }
-
 .slip-flash-win  { animation: flash-win  0.7s ease-out forwards; }
 .slip-flash-loss { animation: flash-loss 0.7s ease-out forwards; }
 
-/* ── Mobile tweaks ─────────────────────────────────────────── */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 @media (max-width: 600px) {
-  table {
-    font-size: 11px;
-  }
-
-  /* Result buttons — finger-friendly */
-  .result-btn {
-    font-size: 13px !important;
-    padding: 8px 14px !important;
-    border-radius: 6px !important;
-  }
-
-  /* Missed-leg chips — easy to tap */
-  .missed-chip {
-    font-size: 13px !important;
-    padding: 9px 14px !important;
-    border-radius: 6px !important;
-  }
-
-  /* Slip card rows in tracker */
-  .tracker-slip {
-    padding: 14px 16px !important;
-  }
-
-  /* Slip generator cards */
-  .slip-card-pick {
-    padding: 10px 12px !important;
-    font-size: 13px !important;
-  }
+  table { font-size: 11px; }
+  .result-btn   { font-size: 13px !important; padding: 8px 14px !important; border-radius: 6px !important; }
+  .missed-chip  { font-size: 13px !important; padding: 9px 14px !important; border-radius: 6px !important; }
+  .tracker-slip { padding: 14px 16px !important; }
+  .slip-card-pick { padding: 10px 12px !important; font-size: 13px !important; }
 }
